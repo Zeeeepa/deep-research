@@ -1,6 +1,5 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
-from typing import Dict, List, Optional
 import modal
 from codegen import Codebase
 from codegen.extensions.langchain.agent import create_agent_with_tools
@@ -13,10 +12,8 @@ from codegen.extensions.langchain.tools import (
 )
 from langchain_core.messages import SystemMessage
 from fastapi.middleware.cors import CORSMiddleware
-from dotenv import load_dotenv
 import os
 
-load_dotenv()
 OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
 
 # Create Modal image with required dependencies
@@ -51,7 +48,7 @@ fastapi_app.add_middleware(
     allow_headers=["*"],
 )
 
-# Reuse the research agent prompt
+# Research agent prompt
 RESEARCH_AGENT_PROMPT = """You are a code research expert. Your goal is to help users understand codebases by:
 1. Finding relevant code through semantic and text search
 2. Analyzing symbol relationships and dependencies
@@ -68,7 +65,6 @@ When analyzing code, consider:
 Break down complex concepts into understandable pieces and use examples when helpful."""
 
 
-# Pydantic models for request/response
 class ResearchRequest(BaseModel):
     repo_name: str
     query: str
@@ -104,7 +100,7 @@ async def research(request: ResearchRequest) -> ResearchResponse:
             verbose=True,
         )
 
-        # Run the agent with just the query
+        # Run the agent with the query
         result = agent.invoke(
             {"input": request.query},
             config={"configurable": {"session_id": "research"}},

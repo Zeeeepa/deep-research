@@ -1,14 +1,32 @@
 "use client"
 
-import { useState } from "react"
-import { Github, MessageSquare} from "lucide-react"
-
+import { useState, useEffect} from "react"
+import { Github, MessageSquare, ArrowRight, FileText } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import ReactMarkdown from 'react-markdown'
 
-interface ResearchResponse {
-  response: string;
+async function cleanLogWithGPT4Mini(logData: string): Promise<string> {
+  try {
+    const response = await fetch('/api/clean-log', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ logData }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to clean log');
+    }
+
+    const data = await response.json();
+    return data.content || logData;
+  } catch (error) {
+    console.error('Error cleaning log:', error);
+    return logData;
+  }
 }
 
 export default function RepoChatDashboard() {
@@ -17,17 +35,30 @@ export default function RepoChatDashboard() {
   const [isLoading, setIsLoading] = useState(false)
   const [isLandingPage, setIsLandingPage] = useState(true)
   const [researchResult, setResearchResult] = useState<string>("")
+  const [showQueryInput, setShowQueryInput] = useState(false)
+  const [isTransitioning, setIsTransitioning] = useState(false)
+  const [logs, setLogs] = useState<string[]>([])
+  const [similarFiles, setSimilarFiles] = useState<string[]>([])
+
+  useEffect(() => {
+    if (repoUrl) {
+      setShowQueryInput(true)
+    } else {
+      setShowQueryInput(false)
+    }
+  }, [repoUrl])
+
 
   const parseRepoUrl = (input: string): string => {
     if (input.includes('github.com')) {
-      const url = new URL(input);
-      const pathParts = url.pathname.split('/').filter(Boolean);
+      const url = new URL(input)
+      const pathParts = url.pathname.split('/').filter(Boolean)
       if (pathParts.length >= 2) {
-        return `${pathParts[0]}/${pathParts[1]}`;
+        return `${pathParts[0]}/${pathParts[1]}`
       }
     }
-    return input;
-  };
+    return input
+  }
 
   const handleSubmit = async () => {
     if (!repoUrl) {
@@ -37,12 +68,22 @@ export default function RepoChatDashboard() {
     setIsLoading(true);
     setIsLandingPage(false);
     setResearchResult("");
-
+    setLogs([]);
+    setSimilarFiles([]);
+    
+    setLogs(["Fetching codebase"]);
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    
+    setLogs(prev => [...prev, "Initializing research tools for agent"]);
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    
     try {
       const parsedRepoUrl = parseRepoUrl(repoUrl);
 
       if (question) {
-        const response = await fetch('https://codegen-sh-staging--code-research-app-fastapi-modal-app.modal.run/research', {
+        setLogs(prev => [...prev, "Looking through files"]);
+        
+        const response = await fetch('https://codegen-sh-staging--code-research-app-fastapi-modal-app-dev.modal.run/research/stream', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -57,8 +98,56 @@ export default function RepoChatDashboard() {
           throw new Error('Failed to fetch research results');
         }
 
-        const data: ResearchResponse = await response.json();
-        setResearchResult(data.response);
+        const reader = response.body?.getReader();
+        const decoder = new TextDecoder();
+        let partialLine = '';
+
+        if (!reader) {
+          throw new Error('Failed to get response reader');
+        }
+
+        try {
+          while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+
+            const chunk = partialLine + decoder.decode(value, { stream: true });
+            const lines = chunk.split('\n');
+            
+            partialLine = lines[lines.length - 1];
+
+            for (let i = 0; i < lines.length - 1; i++) {
+              const line = lines[i].trim();
+              if (line.startsWith('data: ')) {
+                try {
+                  const eventData = JSON.parse(line.slice(6));
+                  if (eventData.type === 'similar_files') {
+                    setSimilarFiles(eventData.content);
+                    setLogs(prev => [...prev, "Starting agent run"]);
+                  } else if (eventData.type === 'content') {
+                    setResearchResult(prev => prev + eventData.content);
+                  } else if (eventData.type === 'error') {
+                    setResearchResult(`Error: ${eventData.content}`);
+                    setIsLoading(false);
+                    return;
+                  } else if (eventData.type === 'complete') {
+                    setResearchResult(eventData.content);
+                    setIsLoading(false);
+                    setLogs(prev => [...prev, "Analysis complete"]);
+                    return;
+                  } else if (['on_tool_start', 'on_tool_end'].includes(eventData.type)) {
+                    const cleanedLog = await cleanLogWithGPT4Mini(JSON.stringify(eventData.data));
+                    setLogs(prev => [...prev, cleanedLog]);
+                  }
+                } catch (e) {
+                  console.error('Error parsing event:', e, line);
+                }
+              }
+            }
+          }
+        } finally {
+          reader.releaseLock();
+        }
       }
     } catch (error) {
       console.error('Error:', error);
@@ -75,49 +164,67 @@ export default function RepoChatDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      {isLandingPage ? (
-        <div className="flex flex-col items-center justify-center min-h-screen p-4">
+    <div className="min-h-screen bg-gradient-to-b from-black to-black text-foreground">
+      <div className={`absolute w-full transition-all duration-300 ease-in-out
+        ${isLandingPage 
+          ? 'opacity-100 translate-y-0' 
+          : 'opacity-0 translate-y-0 pointer-events-none'}`}>
+        <div className={`flex flex-col items-center justify-center min-h-screen p-4 
+          transition-all duration-300 ease-in-out
+          ${isTransitioning ? 'opacity-0' : 'opacity-100'}`}>
           <div className="text-center mb-8">
             <h1 className="text-4xl font-bold flex items-center justify-center gap-3 mb-4">
               <img src="cg.png" alt="CG Logo" className="h-12 w-12" />
               <span>Deep Research</span>
             </h1>
-            <p className="text-muted-foreground">Unlock insights and explore your codebase in seconds</p>
+            <p className="text-muted-foreground">
+              Unlock the power of <a href="https://codegen.com" target="_blank" rel="noopener noreferrer" className="hover:text-primary">Codegen</a> in codebase exploration
+            </p>
           </div>
           <div className="flex flex-col gap-3 w-full max-w-lg">
             <Input
               type="text"
-              placeholder="Enter the GitHub repo link or owner/repo"
+              placeholder="GitHub repo link or owner/repo"
               value={repoUrl}
               onChange={(e) => setRepoUrl(e.target.value)}
-              className="flex-1 h-15 text-lg px-4"
+              className="flex-1 h-25 text-lg px-4 mb-2"
               title="Format: https://github.com/owner/repo or owner/repo"
             />
-            <Input
-              type="text"
-              placeholder="Enter your query regarding the codebase"
-              value={question}
-              onChange={(e) => setQuestion(e.target.value)}
-              onKeyPress={handleKeyPress}
-              className="flex-1 h-15 text-lg px-4"
-            />
+            <div
+              className={`transition-all duration-500 ease-in-out ${
+                showQueryInput ? 'max-h-40 opacity-100' : 'max-h-0 opacity-0'
+              } overflow-hidden`}
+            >
+              <Input
+                type="text"
+                placeholder="Ask Deep Research anything about the codebase"
+                value={question}
+                onChange={(e) => setQuestion(e.target.value)}
+                onKeyPress={handleKeyPress}
+                className="flex-1 h-15 text-lg px-4"
+              />
+            </div>
             <div className="flex justify-center">
               <Button 
                 onClick={handleSubmit} 
-                disabled={isLoading}
+                disabled={isLoading || !repoUrl || !question}
                 className="w-32 mt-5"
               >
-                {isLoading ? "Loading..." : "Analyze"}
+                <span className="font-semibold flex items-center gap-2">
+                  {isLoading ? "Loading..." : <>Explore <ArrowRight className="h-4 w-4" /></>}
+                </span>
               </Button>
             </div>
           </div>
-          <footer className="absolute bottom-0 w-full text-center text-xs text-muted-foreground py-4">
-            built with <a href="https://codegen.com" target="_blank" rel="noopener noreferrer" className="hover:text-primary">Codegen</a>
-          </footer>
         </div>
-      ) : (
-        <div className="flex-1 space-y-4 p-8 pt-8 pb-5">
+      </div>
+      <div className={`absolute w-full transition-all duration-300 ease-in-out
+        ${!isLandingPage 
+          ? 'opacity-100 translate-y-0' 
+          : 'opacity-0 translate-y-0 pointer-events-none'}`}>
+        <div className={`flex-1 space-y-4 p-8 pt-8 pb-5
+          transition-all duration-300 ease-in-out
+          ${isTransitioning ? 'opacity-0' : 'opacity-100'}`}>
           <div className="flex items-center justify-between space-x-4">
             <div 
               className="flex items-center gap-3 cursor-pointer hover:opacity-80" 
@@ -127,75 +234,119 @@ export default function RepoChatDashboard() {
               <h2 className="text-3xl font-bold tracking-tight">Deep Research</h2>
             </div>
             <Button onClick={() => setIsLandingPage(true)}>
-              New Search
+              <span className="font-semibold">New Search</span>
             </Button>
           </div>
           <br></br>
-          <div className="grid grid-cols-2 gap-4 mb-4 mt-4">
-            <Card>
-              <a 
-                href={`https://github.com/${parseRepoUrl(repoUrl)}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="block hover:opacity-80 transition-opacity"
-              >
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle>Repository</CardTitle>
-                  <Github className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <p className="text-muted-foreground">{parseRepoUrl(repoUrl)}</p>
-                </CardContent>
-              </a>
-            </Card>
-            
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle>Search</CardTitle>
-                <MessageSquare className="h-4 w-4 text-muted-foreground" />
+          <div className="h-[calc(100vh-12rem)] animate-in fade-in slide-in-from-bottom-4 duration-500 fill-mode-forwards [animation-delay:600ms]">
+            <Card className="h-full border-0">
+              <CardHeader>
+                <CardTitle className="text-2xl">{question || "No query provided"}</CardTitle>
+                <div className="flex items-center gap-2 text-md text-muted-foreground">
+                  <Github className="h-4 w-4" />
+                  <a 
+                    href={`https://github.com/${parseRepoUrl(repoUrl)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="hover:underline"
+                  >
+                    {parseRepoUrl(repoUrl)}
+                  </a>
+                </div>
               </CardHeader>
               <CardContent>
-                <p className="text-muted-foreground">{question || "No query provided"}</p>
+                <div className="mb-8">
+                  {logs.map((log, index) => (
+                    <div 
+                      key={index} 
+                      className="flex items-center gap-2 text-md text-white slide-in-from-bottom-2"
+                      style={{ animationDelay: `${index * 150}ms` }}
+                    >
+                      {index === logs.length - 1 && isLoading ? (
+                        <img 
+                          src="cg.png" 
+                          alt="CG Logo" 
+                          className="h-5 w-5 animate-spin"
+                          style={{ animationDuration: '0.5s' }}
+                        />
+                      ) : (
+                        <div className="flex items-center">
+                          <span className="text-white">→</span>
+                        </div>
+                      )}
+                      {log}
+                    </div>
+                  ))}
+                </div>
+                {isLoading ? (
+                  <div className="space-y-4">
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    <div className="space-y-3">
+                      <h3 className="font-bold">Relevant Files</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        {isLoading && !similarFiles.length ? (
+                          Array(3).fill(0).map((_, i) => (
+                            <Card key={i} className="h-24 flex items-center justify-center bg-black border-none">
+                              <p className="text-md text-muted-foreground">Loading...</p>
+                            </Card>
+                          ))
+                        ) : similarFiles.length > 0 ? (
+                          similarFiles.map((file, i) => {
+                            const fileName = file.split('/').pop() || file;
+                            const filePath = file.split('/').slice(0, -1).join('/');
+                            return (
+                              <Card 
+                                key={i} 
+                                className="p-4 flex flex-col justify-between bg-black border-none hover:bg-gray-980 transition-colors cursor-pointer"
+                                onClick={() => window.open(`https://github.com/${parseRepoUrl(repoUrl)}/blob/main/${file}`, '_blank')}
+                              >
+                                <div className="flex flex-col gap-2">
+                                  <div className="flex items-center gap-2">
+                                    <FileText className="h-4 w-4 flex-shrink-0 text-white l" />
+                                    <div>
+                                      <p className="text-md font-medium text-white break-words">{fileName}</p>
+                                      {filePath && (
+                                        <p className="text-sm text-muted-foreground break-words">{filePath}</p>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              </Card>
+                            );
+                          })
+                        ) : (
+                          Array(6).fill(0).map((_, i) => (
+                            <Card 
+                              key={i}
+                              className="p-4 flex flex-col justify-between bg-black border-none hover:bg-gray-980 transition-colors cursor-pointer"
+                            >
+                              <div className="flex items-center gap-2">
+                                <p className="text-md font-medium text-muted-foreground">Example file {i + 1}</p>
+                              </div>
+                            </Card>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                    {researchResult && (
+                      <div>
+                        <h3 className="font-bold mb-2">Analysis</h3>
+                        <Card className="mt-5 bg-transparent border-none">
+                          <CardContent className="pt-2 px-3 prose prose-sm max-w-none border-none">
+                            <ReactMarkdown className="text-white text-md">{researchResult}</ReactMarkdown>
+                          </CardContent>
+                        </Card>
+                      </div>
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </div>
-          <Card className="mb-16">
-            <CardHeader>
-              <CardTitle>{"Results"}</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {isLoading ? (
-                <div className="flex flex-col items-center justify-center py-8 space-y-4">
-                  <div className="animate-pulse space-y-4 w-full">
-                    <div className="h-4 bg-muted rounded w-3/4"></div>
-                    <div className="h-4 bg-muted rounded w-1/2"></div>
-                    <div className="h-4 bg-muted rounded w-5/6"></div>
-                    <div className="h-4 bg-muted rounded w-2/3"></div>
-                  </div>
-                </div>
-              ) : researchResult ? (
-                <div className="prose prose-sm max-w-none">
-                  <div className="rounded-lg text-muted-foreground">
-                    {researchResult}
-                  </div>
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center py-8 space-y-4">
-                  <div className="animate-pulse space-y-4 w-full">
-                    <div className="h-4 bg-muted rounded w-3/4"></div>
-                    <div className="h-4 bg-muted rounded w-1/2"></div>
-                    <div className="h-4 bg-muted rounded w-5/6"></div>
-                    <div className="h-4 bg-muted rounded w-2/3"></div>
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-          <footer className="fixed bottom-0 left-0 w-full bg-background text-center text-xs text-muted-foreground py-4">
-            built with <a href="https://codegen.com" target="_blank" rel="noopener noreferrer" className="hover:text-primary">Codegen</a>
-          </footer>
         </div>
-      )}
+      </div>
     </div>
   )
 }

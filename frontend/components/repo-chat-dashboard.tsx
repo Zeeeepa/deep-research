@@ -218,7 +218,7 @@ export default function RepoChatDashboard() {
           </div>
         </div>
       </div>
-      <div className={`absolute w-full transition-all duration-300 ease-in-out
+      <div className={`w-full flex-1 transition-all duration-300 ease-in-out
         ${!isLandingPage 
           ? 'opacity-100 translate-y-0' 
           : 'opacity-0 translate-y-0 pointer-events-none'}`}>
@@ -238,7 +238,7 @@ export default function RepoChatDashboard() {
             </Button>
           </div>
           <br></br>
-          <div className="h-[calc(100vh-12rem)] animate-in fade-in slide-in-from-bottom-4 duration-500 fill-mode-forwards [animation-delay:600ms]">
+          <div className="min-h-[calc(100vh-12rem)] animate-in fade-in slide-in-from-bottom-4 duration-500 fill-mode-forwards [animation-delay:600ms]">
             <Card className="h-full border-0">
               <CardHeader>
                 <CardTitle className="text-2xl">{question || "No query provided"}</CardTitle>

@@ -18,8 +18,6 @@ from typing import List
 from fastapi.responses import StreamingResponse
 import json
 
-OPENAI_API_KEY = os.environ["OPENAI_API_KEY"]
-
 image = (
     modal.Image.debian_slim()
     .apt_install("git")

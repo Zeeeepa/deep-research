@@ -83,7 +83,7 @@ export default function RepoChatDashboard() {
       if (question) {
         setLogs(prev => [...prev, "Looking through files"]);
         
-        const response = await fetch('https://codegen-sh-staging--code-research-app-fastapi-modal-app-dev.modal.run/research/stream', {
+        const response = await fetch('https://codegen-sh--code-research-app-fastapi-modal-app.modal.run/research/stream', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

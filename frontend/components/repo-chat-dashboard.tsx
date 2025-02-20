@@ -173,27 +173,27 @@ export default function RepoChatDashboard() {
           transition-all duration-300 ease-in-out
           ${isTransitioning ? 'opacity-0' : 'opacity-100'}`}>
           <div className="text-center mb-8">
-            <h1 className="text-4xl font-bold flex items-center justify-center gap-3 mb-4">
+            <h1 className="text-4xl font-bold flex items-center justify-center gap-3 mb-4 text-white">
               <img src="cg.png" alt="CG Logo" className="h-12 w-12" />
               <span>Deep Research</span>
             </h1>
             <p className="text-muted-foreground">
-              Unlock the power of <a href="https://codegen.com" target="_blank" rel="noopener noreferrer" className="hover:text-primary">Codegen</a> in codebase exploration
+              Unlock the power of <a href="https://codegen.com" target="_blank" rel="noopener noreferrer" className="hover:text-primary">Codegen</a> in codebase exploration.
             </p>
           </div>
-          <div className="flex flex-col gap-3 w-full max-w-lg">
+          <div className="flex flex-col gap-3 w-full max-w-xl px-8">
             <Input
               type="text"
               placeholder="GitHub repo link or owner/repo"
               value={repoUrl}
               onChange={(e) => setRepoUrl(e.target.value)}
-              className="flex-1 h-25 text-lg px-4 mb-2"
+              className="flex-1 h-25 text-lg px-4 mb-2 bg-[#050505] text-muted-foreground"
               title="Format: https://github.com/owner/repo or owner/repo"
             />
             <div
               className={`transition-all duration-500 ease-in-out ${
                 showQueryInput ? 'max-h-40 opacity-100' : 'max-h-0 opacity-0'
-              } overflow-hidden`}
+              }`}
             >
               <Input
                 type="text"
@@ -201,7 +201,7 @@ export default function RepoChatDashboard() {
                 value={question}
                 onChange={(e) => setQuestion(e.target.value)}
                 onKeyPress={handleKeyPress}
-                className="flex-1 h-15 text-lg px-4"
+                 className="flex-1 h-25 text-lg px-4 mb-2 bg-[#050505] text-muted-foreground"
               />
             </div>
             <div className="flex justify-center">
@@ -222,7 +222,7 @@ export default function RepoChatDashboard() {
         ${!isLandingPage 
           ? 'opacity-100 translate-y-0' 
           : 'opacity-0 translate-y-0 pointer-events-none'}`}>
-        <div className={`flex-1 space-y-4 p-8 pt-8 pb-5
+        <div className={`flex-1 px-10 space-y-4 py-8 pt-8 max-w-[1400px] mx-auto
           transition-all duration-300 ease-in-out
           ${isTransitioning ? 'opacity-0' : 'opacity-100'}`}>
           <div className="flex items-center justify-between space-x-4">
@@ -255,41 +255,28 @@ export default function RepoChatDashboard() {
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="mb-8">
-                  {logs.map((log, index) => (
-                    <div 
-                      key={index} 
-                      className="flex items-center gap-2 text-md text-white slide-in-from-bottom-2"
-                      style={{ animationDelay: `${index * 150}ms` }}
-                    >
-                      {index === logs.length - 1 && isLoading ? (
-                        <img 
-                          src="cg.png" 
-                          alt="CG Logo" 
-                          className="h-5 w-5 animate-spin"
-                          style={{ animationDuration: '0.5s' }}
-                        />
-                      ) : (
-                        <div className="flex items-center">
-                          <span className="text-white">→</span>
-                        </div>
-                      )}
-                      {log}
+                <div className="space-y-6">
+                  {researchResult && (
+                    <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-500">
+                      <Card className="bg-muted/25 border-none rounded-xl">
+                        <CardContent className="pt-6 prose prose-sm max-w-none">
+                          <ReactMarkdown className="text-white text-md">{researchResult}</ReactMarkdown>
+                        </CardContent>
+                      </Card>
                     </div>
-                  ))}
-                </div>
-                {isLoading ? (
-                  <div className="space-y-4">
-                  </div>
-                ) : (
-                  <div className="space-y-6">
+                  )}
+
+                  {researchResult && (
                     <div className="space-y-3">
-                      <h3 className="font-bold">Relevant Files</h3>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      <h3 className="text-lg font-semibold">Relevant Files</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         {isLoading && !similarFiles.length ? (
                           Array(3).fill(0).map((_, i) => (
-                            <Card key={i} className="h-24 flex items-center justify-center bg-black border-none">
-                              <p className="text-md text-muted-foreground">Loading...</p>
+                            <Card 
+                              key={i} 
+                              className="h-24 flex items-center justify-center bg-muted/25 border-none rounded-xl"
+                            >
+                              <p className="text-sm text-muted-foreground">Loading...</p>
                             </Card>
                           ))
                         ) : similarFiles.length > 0 ? (
@@ -299,16 +286,17 @@ export default function RepoChatDashboard() {
                             return (
                               <Card 
                                 key={i} 
-                                className="p-4 flex flex-col justify-between bg-black border-none hover:bg-gray-980 transition-colors cursor-pointer"
+                                className="p-4 flex flex-col justify-between bg-muted/25 border-none hover:bg-muted transition-colors cursor-pointer rounded-xl animate-in fade-in slide-in-from-bottom-2 duration-500"
+                                style={{ animationDelay: `${i * 100}ms` }}
                                 onClick={() => window.open(`https://github.com/${parseRepoUrl(repoUrl)}/blob/main/${file}`, '_blank')}
                               >
                                 <div className="flex flex-col gap-2">
                                   <div className="flex items-center gap-2">
-                                    <FileText className="h-4 w-4 flex-shrink-0 text-white l" />
+                                    <FileText className="h-4 w-4 flex-shrink-0" />
                                     <div>
-                                      <p className="text-md font-medium text-white break-words">{fileName}</p>
+                                      <p className="text-sm font-medium break-words">{fileName}</p>
                                       {filePath && (
-                                        <p className="text-sm text-muted-foreground break-words">{filePath}</p>
+                                        <p className="text-xs text-muted-foreground break-words">{filePath}</p>
                                       )}
                                     </div>
                                   </div>
@@ -320,28 +308,45 @@ export default function RepoChatDashboard() {
                           Array(6).fill(0).map((_, i) => (
                             <Card 
                               key={i}
-                              className="p-4 flex flex-col justify-between bg-black border-none hover:bg-gray-980 transition-colors cursor-pointer"
+                              className="p-4 flex flex-col justify-between bg-muted/25 border-none hover:bg-muted transition-colors cursor-pointer rounded-xl"
                             >
                               <div className="flex items-center gap-2">
-                                <p className="text-md font-medium text-muted-foreground">Example file {i + 1}</p>
+                                <p className="text-sm font-medium text-muted-foreground">Example file {i + 1}</p>
                               </div>
                             </Card>
                           ))
                         )}
                       </div>
                     </div>
-                    {researchResult && (
-                      <div>
-                        <h3 className="font-bold mb-2">Analysis</h3>
-                        <Card className="mt-5 bg-transparent border-none">
-                          <CardContent className="pt-2 px-3 prose prose-sm max-w-none border-none">
-                            <ReactMarkdown className="text-white text-md">{researchResult}</ReactMarkdown>
-                          </CardContent>
-                        </Card>
-                      </div>
-                    )}
+                  )}
+
+                  <div className="space-y-3">
+                    <h3 className="text-lg font-semibold">Agent Logs</h3>
+                    <div className="space-y-2">
+                      {logs.map((log, index) => (
+                        <div 
+                          key={index} 
+                          className="flex items-center gap-2 text-sm text-muted-foreground slide-in-from-bottom-2"
+                          style={{ animationDelay: `${index * 150}ms` }}
+                        >
+                          {index === logs.length - 1 && isLoading ? (
+                            <img 
+                              src="cg.png" 
+                              alt="CG Logo" 
+                              className="h-4 w-4 animate-spin"
+                              style={{ animationDuration: '0.5s' }}
+                            />
+                          ) : (
+                            <div className="flex items-center">
+                              <span>→</span>
+                            </div>
+                          )}
+                          {log}
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                )}
+                </div>
               </CardContent>
             </Card>
           </div>

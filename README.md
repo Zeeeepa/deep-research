@@ -66,3 +66,9 @@ The frontend provides an interface for users to submit a GitHub repository and r
    npm install
    npm run dev
    ```
+
+## Learn More
+
+More information about the `codegen` library can be found [here](https://codegen.com/).
+
+For details on the agent implementation, check out [Deep Code Research with AI](https://docs.codegen.com/tutorials/deep-code-research) from the Codegen docs. This tutorial provides an in-depth guide on how the research agent is created.

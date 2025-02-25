@@ -8,16 +8,16 @@ Users submit a GitHub repository and research query through the frontend. The Mo
 
 ### Backend (Modal API)
 
-The backend is built using Modal and FastAPI, providing a serverless API endpoint for code research.
+The backend is built using [Modal](https://modal.com/) and [FastAPI](https://fastapi.tiangolo.com/), providing a serverless API endpoint for code research.
 
 There is a main API endpoint that handles code research requests. It uses the `codegen` library for codebase analysis.
 
 The agent investigates the codebase through various research tools:
-- ViewFileTool: Read file contents
-- ListDirectoryTool: Explore directory structures
-- SearchTool: Text-based code search
-- SemanticSearchTool: AI-powered semantic code search
-- RevealSymbolTool: Analyze code symbols and relationships
+- `ViewFileTool`: Read file contents
+- `ListDirectoryTool`: Explore directory structures
+- `SearchTool`: Text-based code search
+- `SemanticSearchTool`: AI-powered semantic code search
+- `RevealSymbolTool`: Analyze code symbols and relationships
 
 ```python
 tools = [
@@ -39,19 +39,26 @@ agent = create_agent_with_tools(
 
 ### Frontend (Next.js)
 
-The frontend provides an intuitive interface for users to submit a GitHub repository and research query. This triggers the Modal API to perform the code research and returns the results to the frontend.
+The frontend provides an interface for users to submit a GitHub repository and research query. The components come from the [shadcn/ui](https://ui.shadcn.com/) library. This triggers the Modal API to perform the code research and returns the results to the frontend.
 
 ## Getting Started
 
-1. Set up environment variables:
+1. Set up environment variables in an `.env` file:
    ```
    OPENAI_API_KEY=your_key_here
    ```
 
-2. Deploy the Modal API:
+2. Deploy or serve the Modal API:
+   ```bash
+   modal serve backend/modal_api.py
+   ```
+   `modal serve` runs the API locally for development, creating a temporary endpoint that's active only while the command is running.
    ```bash
    modal deploy backend/modal_api.py
    ```
+   `modal deploy` creates a persistent Modal app and deploys the FastAPI app to it, generating a permanent API endpoint.
+   
+   After deployment, you'll need to update the API endpoint in the frontend configuration to point to your deployed Modal app URL.
 
 3. Run the Next.js frontend:
    ```bash

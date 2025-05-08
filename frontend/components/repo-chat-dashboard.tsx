@@ -86,7 +86,14 @@ export default function RepoChatDashboard() {
         
 const modalApiUrl = process.env.NEXT_PUBLIC_MODAL_API_URL;
 if (!modalApiUrl) {
-  throw new Error('NEXT_PUBLIC_MODAL_API_URL environment variable is not set');
+    throw new Error('NEXT_PUBLIC_MODAL_API_URL environment variable is not set');
+}
+
+try {
+    new URL(modalApiUrl); // Validate URL format
+} catch (e) {
+    throw new Error('NEXT_PUBLIC_MODAL_API_URL is not a valid URL');
+}
 }
         
         // Log the API URL being used (only in development)

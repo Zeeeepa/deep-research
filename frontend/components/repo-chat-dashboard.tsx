@@ -84,8 +84,10 @@ export default function RepoChatDashboard() {
       if (question) {
         setLogs(prev => [...prev, "Looking through files"]);
         
-        // Use environment variable for Modal API endpoint. Ensure NEXT_PUBLIC_MODAL_API_URL is set.
-        const modalApiUrl = process.env.NEXT_PUBLIC_MODAL_API_URL || 'https://codegen-sh--code-research-app-fastapi-modal-app.modal.run/research/stream';
+const modalApiUrl = process.env.NEXT_PUBLIC_MODAL_API_URL;
+if (!modalApiUrl) {
+  throw new Error('NEXT_PUBLIC_MODAL_API_URL environment variable is not set');
+}
         
         // Log the API URL being used (only in development)
         if (process.env.NODE_ENV === 'development') {

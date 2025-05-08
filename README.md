@@ -67,34 +67,114 @@ The `NEXT_PUBLIC_MODAL_API_URL` is particularly important as it tells the fronte
 
 ## Getting Started
 
-1. Set up environment variables:
+### Prerequisites
 
-   **Backend**: No `.env` file needed as environment variables are set through Modal's configuration.
-   
-   **Frontend**: Create a `.env.local` file in the `frontend` directory:
-   ```
-   OPENAI_API_KEY=your_key_here
-   NEXT_PUBLIC_MODAL_API_URL=your_modal_app_url_here
-   ```
+1. [Modal CLI](https://modal.com/docs/guide/cli) installed and configured
+2. [Node.js](https://nodejs.org/) (v18 or later)
+3. [npm](https://www.npmjs.com/) or [yarn](https://yarnpkg.com/)
+4. An OpenAI API key for the log cleaning functionality
 
-2. Deploy or serve the Modal API:
+### Setup and Deployment
+
+1. **Clone the repository**:
    ```bash
-   modal serve backend/api.py
+   git clone https://github.com/Zeeeepa/deep-research.git
+   cd deep-research
    ```
-   `modal serve` runs the API locally for development, creating a temporary endpoint that's active only while the command is running.
-   ```bash
-   modal deploy backend/api.py
-   ```
-   `modal deploy` creates a persistent Modal app and deploys the FastAPI app to it, generating a permanent API endpoint.
-   
-   After deployment, you'll need to update the `NEXT_PUBLIC_MODAL_API_URL` in the frontend configuration to point to your deployed Modal app URL.
 
-3. Run the Next.js frontend:
+2. **Set up environment variables**:
+
+   **Backend**: 
+   - Create a `.env` file in the `backend` directory using the provided `.env.example` as a template.
+   - These variables will be used when deploying to Modal.
+   
+   **Frontend**: 
+   - Create a `.env.local` file in the `frontend` directory using the provided `.env.example` as a template.
+   - Make sure to set your OpenAI API key.
+
+3. **Configure Modal Secrets** (if needed):
+   ```bash
+   modal secret create agent-secret --env-file backend/.env
+   ```
+   This creates a Modal secret from your environment variables that will be accessible to your deployed app.
+
+4. **Deploy the Modal API**:
+   
+   For development (temporary endpoint):
+   ```bash
+   cd backend
+   modal serve api.py
+   ```
+   
+   For production (persistent endpoint):
+   ```bash
+   cd backend
+   modal deploy api.py
+   ```
+   
+   After deployment, Modal will provide a URL for your API. It will look something like:
+   ```
+   https://your-username--code-research-app-fastapi-modal-app.modal.run
+   ```
+   
+   **Important**: Take note of this URL as you'll need to update your frontend configuration.
+
+5. **Update the frontend configuration**:
+   
+   Edit the `.env.local` file in the `frontend` directory to update the `NEXT_PUBLIC_MODAL_API_URL` with your deployed Modal app URL:
+   ```
+   NEXT_PUBLIC_MODAL_API_URL=https://your-username--code-research-app-fastapi-modal-app.modal.run/research/stream
+   ```
+   
+   Make sure to append `/research/stream` to the URL.
+
+6. **Run the Next.js frontend**:
    ```bash
    cd frontend
    npm install
    npm run dev
    ```
+   
+   The frontend will be available at `http://localhost:3000`.
+
+## Deployment Options
+
+### Modal Deployment
+
+The backend is designed to be deployed on Modal, which provides serverless infrastructure. When you run `modal deploy`, your app will be deployed to Modal's cloud infrastructure and will be accessible via a persistent URL.
+
+You can customize the deployment by modifying the environment variables in your `.env` file or by setting them directly in the Modal dashboard.
+
+### Frontend Deployment
+
+The Next.js frontend can be deployed to various platforms:
+
+1. **Vercel** (recommended):
+   ```bash
+   cd frontend
+   vercel
+   ```
+   
+   Make sure to set the environment variables in the Vercel dashboard.
+
+2. **Netlify**:
+   Create a `netlify.toml` file in the `frontend` directory:
+   ```toml
+   [build]
+     command = "npm run build"
+     publish = ".next"
+   ```
+   
+   Then deploy using the Netlify CLI or connect your repository to Netlify.
+
+3. **Static Export**:
+   ```bash
+   cd frontend
+   npm run build
+   npm run export
+   ```
+   
+   The static files will be in the `out` directory and can be deployed to any static hosting service.
 
 ## Error Handling
 
@@ -103,6 +183,21 @@ The application includes robust error handling for various scenarios:
 - **Missing Environment Variables**: The application provides fallbacks for most environment variables and logs warnings when using defaults.
 - **API Connection Issues**: The frontend displays clear error messages if it cannot connect to the Modal API.
 - **Research Process Errors**: Both backend and frontend handle and display errors that occur during the research process.
+
+### Troubleshooting Common Issues
+
+1. **Modal API Connection Errors**:
+   - Verify that the `NEXT_PUBLIC_MODAL_API_URL` is correct and includes the `/research/stream` path.
+   - Check that your Modal app is deployed and running.
+   - Ensure CORS is properly configured if you're getting CORS errors.
+
+2. **OpenAI API Errors**:
+   - Verify that your OpenAI API key is valid and has sufficient credits.
+   - Check the server logs for specific error messages.
+
+3. **Deployment Issues**:
+   - If Modal deployment fails, check the Modal CLI output for error messages.
+   - Ensure you have the necessary permissions to create and deploy Modal apps.
 
 ## Learn More
 

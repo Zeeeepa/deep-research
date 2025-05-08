@@ -84,17 +84,16 @@ export default function RepoChatDashboard() {
       if (question) {
         setLogs(prev => [...prev, "Looking through files"]);
         
-const modalApiUrl = process.env.NEXT_PUBLIC_MODAL_API_URL;
-if (!modalApiUrl) {
-    throw new Error('NEXT_PUBLIC_MODAL_API_URL environment variable is not set');
-}
+        const modalApiUrl = process.env.NEXT_PUBLIC_MODAL_API_URL;
+        if (!modalApiUrl) {
+            throw new Error('NEXT_PUBLIC_MODAL_API_URL environment variable is not set');
+        }
 
-try {
-    new URL(modalApiUrl); // Validate URL format
-} catch (e) {
-    throw new Error('NEXT_PUBLIC_MODAL_API_URL is not a valid URL');
-}
-}
+        try {
+            new URL(modalApiUrl); // Validate URL format
+        } catch (e) {
+            throw new Error('NEXT_PUBLIC_MODAL_API_URL is not a valid URL');
+        }
         
         // Log the API URL being used (only in development)
         if (process.env.NODE_ENV === 'development') {

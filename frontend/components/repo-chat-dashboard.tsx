@@ -83,8 +83,8 @@ export default function RepoChatDashboard() {
       if (question) {
         setLogs(prev => [...prev, "Looking through files"]);
         
-        // Updated Modal API endpoint URL to the latest format
-        const response = await fetch('https://codegen-sh--code-research-app-fastapi-modal-app.modal.run/research/stream', {
+        // Use environment variable for Modal API endpoint
+        const response = await fetch(process.env.NEXT_PUBLIC_MODAL_API_URL || 'https://codegen-sh--code-research-app-fastapi-modal-app.modal.run/research/stream', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',

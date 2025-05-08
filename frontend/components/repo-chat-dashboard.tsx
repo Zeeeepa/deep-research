@@ -378,16 +378,24 @@ try {
           </div>
         </div>
       </div>
-      {/* Add error message display */}
-      {apiError && (
+// Create a new component: ApiErrorAlert.tsx
+interface ApiErrorAlertProps {
+    error: string | null;
+}
+
+const ApiErrorAlert: React.FC<ApiErrorAlertProps> = ({ error }) => {
+    if (!error) return null;
+    
+    return (
         <div className="fixed bottom-4 right-4 bg-red-500/90 text-white p-4 rounded-lg shadow-lg max-w-md z-50">
-          <h4 className="font-bold mb-1">API Error</h4>
-          <p className="text-sm">{apiError}</p>
-          <p className="text-xs mt-2">
-            If this persists, check that the NEXT_PUBLIC_MODAL_API_URL environment variable is correctly set.
-          </p>
+            <h4 className="font-bold mb-1">API Error</h4>
+            <p className="text-sm">{error}</p>
+            <p className="text-xs mt-2">
+                If this persists, check that the NEXT_PUBLIC_MODAL_API_URL environment variable is correctly set.
+            </p>
         </div>
-      )}
+    );
+};
     </div>
   )
 }

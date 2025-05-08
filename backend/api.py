@@ -14,9 +14,24 @@ from langchain_core.messages import SystemMessage
 from fastapi.middleware.cors import CORSMiddleware
 from codegen.extensions.index.file_index import FileIndex
 import os
-from typing import List
+from typing import List, Optional
 from fastapi.responses import StreamingResponse
 import json
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Environment variables configuration
+# MODAL_APP_NAME: Name of the Modal app (default: "code-research-app")
+# AGENT_SECRET_NAME: Name of the Modal secret containing API keys (default: "agent-secret")
+MODAL_APP_NAME = os.environ.get("MODAL_APP_NAME", "code-research-app")
+AGENT_SECRET_NAME = os.environ.get("AGENT_SECRET_NAME", "agent-secret")
+
+# Log configuration information
+logger.info(f"Initializing Modal app with name: {MODAL_APP_NAME}")
+logger.info(f"Using secret: {AGENT_SECRET_NAME}")
 
 image = (
     modal.Image.debian_slim()
@@ -31,17 +46,36 @@ image = (
     )
 )
 
-app = modal.App(
-    name="code-research-app",
-    image=image,
-    secrets=[modal.Secret.from_name("agent-secret")],
+# Initialize Modal app with configurable name and secrets
+try:
+    app = modal.App(
+        name=MODAL_APP_NAME,
+        image=image,
+        secrets=[modal.Secret.from_name(AGENT_SECRET_NAME)],
+    )
+    logger.info(f"Successfully initialized Modal app: {MODAL_APP_NAME}")
+except Exception as e:
+    logger.error(f"Failed to initialize Modal app: {str(e)}")
+    # Fallback to default configuration if there's an error
+    app = modal.App(
+        name="code-research-app-fallback",
+        image=image,
+    )
+    logger.warning("Using fallback Modal app configuration without secrets")
+
+fastapi_app = FastAPI(
+    title="Code Research API",
+    description="API for researching and analyzing codebases using AI",
+    version="1.0.0",
 )
 
-fastapi_app = FastAPI()
+# Configure CORS
+ALLOWED_ORIGINS = os.environ.get("ALLOWED_ORIGINS", "*").split(",")
+logger.info(f"Configuring CORS with allowed origins: {ALLOWED_ORIGINS}")
 
 fastapi_app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -65,10 +99,10 @@ Break down complex concepts into understandable pieces and use examples when hel
 
 current_status = "Intializing process..."
 
-
 def update_status(new_status: str):
     global current_status
     current_status = new_status
+    logger.info(f"Status update: {new_status}")
     return {"type": "status", "content": new_status}
 
 
@@ -76,18 +110,14 @@ class ResearchRequest(BaseModel):
     repo_name: str
     query: str
 
-
 class ResearchResponse(BaseModel):
     response: str
-
 
 class FilesResponse(BaseModel):
     files: List[str]
 
-
 class StatusResponse(BaseModel):
     status: str
-
 
 # @fastapi_app.post("/files", response_model=ResearchResponse)
 # async def files(request: ResearchRequest) -> ResearchResponse:
@@ -176,17 +206,44 @@ async def get_similar_files(repo_name: str, query: str) -> List[str]:
 async def research_stream(request: ResearchRequest):
     """
     Streaming endpoint to perform code research on a GitHub repository.
+    
+    This endpoint streams the research results as server-sent events (SSE).
+    The frontend can consume these events to provide real-time updates.
+    
+    Environment Variables:
+        NEXT_PUBLIC_MODAL_API_URL: The URL to this endpoint (used by frontend)
+    
+    Returns:
+        StreamingResponse: A streaming response with research results
     """
     try:
+        logger.info(f"Starting streaming research for repo: {request.repo_name}")
+        logger.info(f"Research query: {request.query}")
 
         async def event_generator():
             final_response = ""
 
-            similar_files_future = get_similar_files.remote.aio(
-                request.repo_name, request.query
-            )
+            # Get similar files in parallel
+            try:
+                similar_files_future = get_similar_files.remote.aio(
+                    request.repo_name, request.query
+                )
+                logger.info(f"Initiated similar files search for {request.repo_name}")
+            except Exception as e:
+                logger.error(f"Error initiating similar files search: {str(e)}")
+                yield f"data: {json.dumps({'type': 'error', 'content': f'Failed to start similar files search: {str(e)}'})}\\n\\n"
+                similar_files_future = None
 
-            codebase = Codebase.from_repo(request.repo_name)
+            # Initialize codebase
+            try:
+                codebase = Codebase.from_repo(request.repo_name)
+                logger.info(f"Successfully initialized codebase from {request.repo_name}")
+            except Exception as e:
+                logger.error(f"Error initializing codebase: {str(e)}")
+                yield f"data: {json.dumps({'type': 'error', 'content': f'Failed to initialize codebase: {str(e)}'})}\\n\\n"
+                return
+
+            # Create tools
             tools = [
                 ViewFileTool(codebase),
                 ListDirectoryTool(codebase),
@@ -194,34 +251,63 @@ async def research_stream(request: ResearchRequest):
                 SemanticSearchTool(codebase),
                 RevealSymbolTool(codebase),
             ]
+            logger.info("Research tools created successfully")
 
-            agent = create_agent_with_tools(
-                codebase=codebase,
-                tools=tools,
-                chat_history=[SystemMessage(content=RESEARCH_AGENT_PROMPT)],
-                verbose=True,
-            )
+            # Initialize agent
+            try:
+                agent = create_agent_with_tools(
+                    codebase=codebase,
+                    tools=tools,
+                    chat_history=[SystemMessage(content=RESEARCH_AGENT_PROMPT)],
+                    verbose=True,
+                )
+                logger.info("Research agent initialized successfully")
+            except Exception as e:
+                logger.error(f"Error initializing agent: {str(e)}")
+                yield f"data: {json.dumps({'type': 'error', 'content': f'Failed to initialize research agent: {str(e)}'})}\\n\\n"
+                return
 
-            research_task = agent.astream_events(
-                {"input": request.query},
-                version="v1",
-                config={"configurable": {"session_id": "research"}},
-            )
+            # Start research task
+            try:
+                research_task = agent.astream_events(
+                    {"input": request.query},
+                    version="v1",
+                    config={"configurable": {"session_id": "research"}},
+                )
+                logger.info("Research task started successfully")
+            except Exception as e:
+                logger.error(f"Error starting research task: {str(e)}")
+                yield f"data: {json.dumps({'type': 'error', 'content': f'Failed to start research task: {str(e)}'})}\\n\\n"
+                return
 
-            similar_files = await similar_files_future
-            yield f"data: {json.dumps({'type': 'similar_files', 'content': similar_files})}\n\n"
+            # Get similar files results if available
+            if similar_files_future:
+                try:
+                    similar_files = await similar_files_future
+                    logger.info(f"Found {len(similar_files)} similar files")
+                    yield f"data: {json.dumps({'type': 'similar_files', 'content': similar_files})}\\n\\n"
+                except Exception as e:
+                    logger.error(f"Error getting similar files: {str(e)}")
+                    yield f"data: {json.dumps({'type': 'error', 'content': f'Failed to get similar files: {str(e)}'})}\\n\\n"
 
-            async for event in research_task:
-                kind = event["event"]
-                if kind == "on_chat_model_stream":
-                    content = event["data"]["chunk"].content
-                    if content:
-                        final_response += content
-                        yield f"data: {json.dumps({'type': 'content', 'content': content})}\n\n"
-                elif kind in ["on_tool_start", "on_tool_end"]:
-                    yield f"data: {json.dumps({'type': kind, 'data': event['data']})}\n\n"
+            # Stream research results
+            try:
+                async for event in research_task:
+                    kind = event["event"]
+                    if kind == "on_chat_model_stream":
+                        content = event["data"]["chunk"].content
+                        if content:
+                            final_response += content
+                            yield f"data: {json.dumps({'type': 'content', 'content': content})}\\n\\n"
+                    elif kind in ["on_tool_start", "on_tool_end"]:
+                        yield f"data: {json.dumps({'type': kind, 'data': event['data']})}\\n\\n"
+            except Exception as e:
+                logger.error(f"Error during research streaming: {str(e)}")
+                yield f"data: {json.dumps({'type': 'error', 'content': f'Error during research: {str(e)}'})}\\n\\n"
 
-            yield f"data: {json.dumps({'type': 'complete', 'content': final_response})}\n\n"
+            # Send completion event
+            logger.info("Research completed successfully")
+            yield f"data: {json.dumps({'type': 'complete', 'content': final_response})}\\n\\n"
 
         return StreamingResponse(
             event_generator(),
@@ -229,23 +315,67 @@ async def research_stream(request: ResearchRequest):
         )
 
     except Exception as e:
+        logger.error(f"Unhandled exception in research_stream: {str(e)}")
         error_status = update_status("Error occurred")
         return StreamingResponse(
             iter(
                 [
-                    f"data: {json.dumps(error_status)}\n\n",
-                    f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n",
+                    f"data: {json.dumps(error_status)}\\n\\n",
+                    f"data: {json.dumps({'type': 'error', 'content': str(e)})}\\n\\n",
                 ]
             ),
             media_type="text/event-stream",
         )
 
 
-@app.function(image=image, secrets=[modal.Secret.from_name("agent-secret")])
+@app.function(
+    image=image, 
+    secrets=[modal.Secret.from_name(AGENT_SECRET_NAME)],
+    timeout=600  # 10 minute timeout for long-running operations
+)
 @modal.asgi_app()
 def fastapi_modal_app():
+    """
+    Modal ASGI app function that serves the FastAPI application.
+    
+    Environment Variables:
+        MODAL_APP_NAME: Custom name for the Modal app (default: "code-research-app")
+        AGENT_SECRET_NAME: Name of the Modal secret (default: "agent-secret")
+    
+    Returns:
+        FastAPI application instance
+    """
+    logger.info(f"Starting FastAPI application with Modal integration")
     return fastapi_app
 
 
 if __name__ == "__main__":
-    app.deploy("code-research-app")
+    """
+    Main entry point for deploying the Modal application.
+    
+    Environment Variables:
+        MODAL_APP_NAME: Custom name for the Modal app (default: "code-research-app")
+        AGENT_SECRET_NAME: Name of the Modal secret (default: "agent-secret")
+        ALLOWED_ORIGINS: Comma-separated list of allowed CORS origins (default: "*")
+        
+    Frontend Environment Variables:
+        NEXT_PUBLIC_MODAL_API_URL: URL to the deployed Modal app's streaming endpoint
+            Example: "https://codegen-sh--code-research-app-fastapi-modal-app.modal.run/research/stream"
+            This should be set in the frontend .env file or deployment environment.
+    """
+    logger.info(f"Deploying Modal app: {MODAL_APP_NAME}")
+    
+    # Print environment variable documentation for reference
+    print("\n=== Environment Variable Documentation ===")
+    print("Backend Environment Variables:")
+    print("  MODAL_APP_NAME: Custom name for the Modal app (default: 'code-research-app')")
+    print("  AGENT_SECRET_NAME: Name of the Modal secret (default: 'agent-secret')")
+    print("  ALLOWED_ORIGINS: Comma-separated list of allowed CORS origins (default: '*')")
+    print("\nFrontend Environment Variables:")
+    print("  NEXT_PUBLIC_MODAL_API_URL: URL to the deployed Modal app's streaming endpoint")
+    print("    Example: 'https://codegen-sh--code-research-app-fastapi-modal-app.modal.run/research/stream'")
+    print("    This should be set in the frontend .env file or deployment environment.")
+    print("===========================================\n")
+    
+    # Deploy the app
+    app.deploy(MODAL_APP_NAME)

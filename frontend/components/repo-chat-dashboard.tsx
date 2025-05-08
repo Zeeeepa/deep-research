@@ -39,6 +39,7 @@ export default function RepoChatDashboard() {
   const [isTransitioning, setIsTransitioning] = useState(false)
   const [logs, setLogs] = useState<string[]>([])
   const [similarFiles, setSimilarFiles] = useState<string[]>([])
+  const [apiError, setApiError] = useState<string | null>(null)
 
   useEffect(() => {
     if (repoUrl) {
@@ -47,7 +48,6 @@ export default function RepoChatDashboard() {
       setShowQueryInput(false)
     }
   }, [repoUrl])
-
 
   const parseRepoUrl = (input: string): string => {
     if (input.includes('github.com')) {
@@ -70,6 +70,7 @@ export default function RepoChatDashboard() {
     setResearchResult("");
     setLogs([]);
     setSimilarFiles([]);
+    setApiError(null);
     
     setLogs(["Fetching codebase"]);
     await new Promise(resolve => setTimeout(resolve, 2000));
@@ -83,8 +84,15 @@ export default function RepoChatDashboard() {
       if (question) {
         setLogs(prev => [...prev, "Looking through files"]);
         
-        // Updated Modal API endpoint URL to the latest format
-        const response = await fetch('https://codegen-sh--code-research-app-fastapi-modal-app.modal.run/research/stream', {
+        // Use environment variable for Modal API endpoint. Ensure NEXT_PUBLIC_MODAL_API_URL is set.
+        const modalApiUrl = process.env.NEXT_PUBLIC_MODAL_API_URL || 'https://codegen-sh--code-research-app-fastapi-modal-app.modal.run/research/stream';
+        
+        // Log the API URL being used (only in development)
+        if (process.env.NODE_ENV === 'development') {
+          console.log(`Using Modal API URL: ${modalApiUrl}`);
+        }
+        
+        const response = await fetch(modalApiUrl, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -96,7 +104,7 @@ export default function RepoChatDashboard() {
         });
 
         if (!response.ok) {
-          throw new Error('Failed to fetch research results');
+          throw new Error(`Failed to fetch research results: ${response.status} ${response.statusText}`);
         }
 
         const reader = response.body?.getReader();
@@ -129,6 +137,7 @@ export default function RepoChatDashboard() {
                     setResearchResult(prev => prev + eventData.content);
                   } else if (eventData.type === 'error') {
                     setResearchResult(`Error: ${eventData.content}`);
+                    setApiError(eventData.content);
                     setIsLoading(false);
                     return;
                   } else if (eventData.type === 'complete') {
@@ -152,7 +161,14 @@ export default function RepoChatDashboard() {
       }
     } catch (error) {
       console.error('Error:', error);
-      setResearchResult("Error: Failed to process request. Please try again.");
+      const errorMessage = error instanceof Error ? error.message : 'Failed to process request. Please try again.';
+      setResearchResult(`Error: ${errorMessage}`);
+      setApiError(errorMessage);
+      
+      // Add specific error handling for Modal API connection issues
+      if (errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError')) {
+        setLogs(prev => [...prev, "Error: Could not connect to the research API. Please check your connection and the NEXT_PUBLIC_MODAL_API_URL environment variable."]);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -353,6 +369,16 @@ export default function RepoChatDashboard() {
           </div>
         </div>
       </div>
+      {/* Add error message display */}
+      {apiError && (
+        <div className="fixed bottom-4 right-4 bg-red-500/90 text-white p-4 rounded-lg shadow-lg max-w-md z-50">
+          <h4 className="font-bold mb-1">API Error</h4>
+          <p className="text-sm">{apiError}</p>
+          <p className="text-xs mt-2">
+            If this persists, check that the NEXT_PUBLIC_MODAL_API_URL environment variable is correctly set.
+          </p>
+        </div>
+      )}
     </div>
   )
 }

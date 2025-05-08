@@ -18,6 +18,8 @@ from typing import List, Optional
 from fastapi.responses import StreamingResponse
 import json
 import logging
+import re
+from codegen.exceptions import CodebaseError
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -28,10 +30,12 @@ logger = logging.getLogger(__name__)
 # AGENT_SECRET_NAME: Name of the Modal secret containing API keys (default: "agent-secret")
 MODAL_APP_NAME = os.environ.get("MODAL_APP_NAME", "code-research-app")
 AGENT_SECRET_NAME = os.environ.get("AGENT_SECRET_NAME", "agent-secret")
+MODAL_FUNCTION_TIMEOUT = int(os.environ.get("MODAL_FUNCTION_TIMEOUT", 600))
 
 # Log configuration information
 logger.info(f"Initializing Modal app with name: {MODAL_APP_NAME}")
 logger.info(f"Using secret: {AGENT_SECRET_NAME}")
+logger.info(f"Function timeout: {MODAL_FUNCTION_TIMEOUT} seconds")
 
 image = (
     modal.Image.debian_slim()
@@ -48,14 +52,23 @@ image = (
 
 # Initialize Modal app with configurable name and secrets
 try:
+    # Try to get the secret first
+    secrets = []
+    try:
+        secrets = [modal.Secret.from_name(AGENT_SECRET_NAME)]
+        logger.info(f"Successfully loaded secret: {AGENT_SECRET_NAME}")
+    except Exception as e:
+        logger.error(f"Failed to retrieve secret {AGENT_SECRET_NAME}: {str(e)}", exc_info=True)
+        logger.warning("Proceeding without secrets. API functionality may be limited.")
+    
     app = modal.App(
         name=MODAL_APP_NAME,
         image=image,
-        secrets=[modal.Secret.from_name(AGENT_SECRET_NAME)],
+        secrets=secrets,
     )
     logger.info(f"Successfully initialized Modal app: {MODAL_APP_NAME}")
 except Exception as e:
-    logger.error(f"Failed to initialize Modal app: {str(e)}")
+    logger.error(f"Failed to initialize Modal app: {str(e)}", exc_info=True)
     # Fallback to default configuration if there's an error
     app = modal.App(
         name="code-research-app-fallback",
@@ -204,18 +217,7 @@ async def get_similar_files(repo_name: str, query: str) -> List[str]:
 
 @fastapi_app.post("/research/stream")
 async def research_stream(request: ResearchRequest):
-    """Streaming endpoint to perform code research on a GitHub repository."""
-    # Validate repo_name format
-    if not re.match(r'^[\w-]+/[\w-]+$', request.repo_name):
-        raise HTTPException(status_code=400, message="Invalid repository name format")
-    
-    # Validate query content
-    if not request.query.strip():
-        raise HTTPException(status_code=400, message="Query cannot be empty")
-    
-    try:
-        logger.info(f"Starting streaming research for repo: {request.repo_name}")
-    Streaming endpoint to perform code research on a GitHub repository.
+    """Streaming endpoint to perform code research on a GitHub repository.
     
     This endpoint streams the research results as server-sent events (SSE).
     The frontend can consume these events to provide real-time updates.
@@ -323,17 +325,40 @@ async def research_stream(request: ResearchRequest):
             event_generator(),
             media_type="text/event-stream",
         )
-
+    
+    except ValueError as e:
+        # Handle validation errors
+        logger.error(f"Validation error in research_stream: {str(e)}", exc_info=True)
+        error_status = update_status("Validation error")
+        return StreamingResponse(
+            iter([
+                f"data: {json.dumps(error_status)}\\n\\n",
+                f"data: {json.dumps({'type': 'error', 'content': f'Invalid input: {str(e)}'})}\\n\\n",
+            ]),
+            media_type="text/event-stream",
+        )
+    
+    except CodebaseError as e:
+        # Handle codebase-specific errors
+        logger.error(f"Codebase error in research_stream: {str(e)}", exc_info=True)
+        error_status = update_status("Repository error")
+        return StreamingResponse(
+            iter([
+                f"data: {json.dumps(error_status)}\\n\\n",
+                f"data: {json.dumps({'type': 'error', 'content': f'Repository error: {str(e)}'})}\\n\\n",
+            ]),
+            media_type="text/event-stream",
+        )
+    
     except Exception as e:
-        logger.error(f"Unhandled exception in research_stream: {str(e)}")
+        # Handle all other unexpected errors
+        logger.error(f"Unhandled exception in research_stream: {str(e)}", exc_info=True)
         error_status = update_status("Error occurred")
         return StreamingResponse(
-            iter(
-                [
-                    f"data: {json.dumps(error_status)}\\n\\n",
-                    f"data: {json.dumps({'type': 'error', 'content': str(e)})}\\n\\n",
-                ]
-            ),
+            iter([
+                f"data: {json.dumps(error_status)}\\n\\n",
+                f"data: {json.dumps({'type': 'error', 'content': str(e)})}\\n\\n",
+            ]),
             media_type="text/event-stream",
         )
 
@@ -341,7 +366,7 @@ async def research_stream(request: ResearchRequest):
 @app.function(
     image=image, 
     secrets=[modal.Secret.from_name(AGENT_SECRET_NAME)],
-    timeout=600  # 10 minute timeout for long-running operations
+    timeout=MODAL_FUNCTION_TIMEOUT  # Use configurable timeout
 )
 @modal.asgi_app()
 def fastapi_modal_app():
@@ -351,6 +376,7 @@ def fastapi_modal_app():
     Environment Variables:
         MODAL_APP_NAME: Custom name for the Modal app (default: "code-research-app")
         AGENT_SECRET_NAME: Name of the Modal secret (default: "agent-secret")
+        MODAL_FUNCTION_TIMEOUT: Timeout in seconds for the function (default: 600)
     
     Returns:
         FastAPI application instance
@@ -367,6 +393,7 @@ if __name__ == "__main__":
         MODAL_APP_NAME: Custom name for the Modal app (default: "code-research-app")
         AGENT_SECRET_NAME: Name of the Modal secret (default: "agent-secret")
         ALLOWED_ORIGINS: Comma-separated list of allowed CORS origins (default: "*")
+        MODAL_FUNCTION_TIMEOUT: Timeout in seconds for the function (default: 600)
         
     Frontend Environment Variables:
         NEXT_PUBLIC_MODAL_API_URL: URL to the deployed Modal app's streaming endpoint
@@ -381,6 +408,7 @@ if __name__ == "__main__":
     print("  MODAL_APP_NAME: Custom name for the Modal app (default: 'code-research-app')")
     print("  AGENT_SECRET_NAME: Name of the Modal secret (default: 'agent-secret')")
     print("  ALLOWED_ORIGINS: Comma-separated list of allowed CORS origins (default: '*')")
+    print("  MODAL_FUNCTION_TIMEOUT: Timeout in seconds for the function (default: 600)")
     print("\nFrontend Environment Variables:")
     print("  NEXT_PUBLIC_MODAL_API_URL: URL to the deployed Modal app's streaming endpoint")
     print("    Example: 'https://codegen-sh--code-research-app-fastapi-modal-app.modal.run/research/stream'")

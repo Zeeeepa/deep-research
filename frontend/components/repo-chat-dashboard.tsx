@@ -176,7 +176,7 @@ try {
       
       // Add specific error handling for Modal API connection issues
       if (errorMessage.includes('Failed to fetch') || errorMessage.includes('NetworkError')) {
-        setLogs(prev => [...prev, "Error: Could not connect to the research API. Please check your connection and the NEXT_PUBLIC_MODAL_API_URL environment variable."]);
+        setLogs(prev => [...prev, "Error: Could not connect to the research API. Please check your connection and the NEXT_PUBLIC_MODAL_API_URL environment variable. See the README for configuration instructions."]);
       }
     } finally {
       setIsLoading(false);
@@ -378,7 +378,11 @@ try {
           </div>
         </div>
       </div>
-// Create a new component: ApiErrorAlert.tsx
+      {apiError && <ApiErrorAlert error={apiError} />}
+    </div>
+  )
+}
+
 interface ApiErrorAlertProps {
     error: string | null;
 }
@@ -392,10 +396,8 @@ const ApiErrorAlert: React.FC<ApiErrorAlertProps> = ({ error }) => {
             <p className="text-sm">{error}</p>
             <p className="text-xs mt-2">
                 If this persists, check that the NEXT_PUBLIC_MODAL_API_URL environment variable is correctly set.
+                See the <a href="https://github.com/Zeeeepa/deep-research#environment-variables" className="underline hover:text-white/80" target="_blank" rel="noopener noreferrer">documentation</a> for more information.
             </p>
         </div>
     );
 };
-    </div>
-  )
-}

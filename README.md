@@ -52,6 +52,7 @@ These variables configure the Modal backend application:
 | `MODAL_APP_NAME` | Custom name for the Modal app | `"code-research-app"` |
 | `AGENT_SECRET_NAME` | Name of the Modal secret containing API keys | `"agent-secret"` |
 | `ALLOWED_ORIGINS` | Comma-separated list of allowed CORS origins | `"*"` |
+| `MODAL_FUNCTION_TIMEOUT` | Timeout in seconds for the Modal function | `600` |
 
 ### Frontend Environment Variables
 

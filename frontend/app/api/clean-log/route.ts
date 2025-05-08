@@ -1,6 +1,7 @@
 import OpenAI from 'openai';
 import { NextResponse } from 'next/server';
 
+// Updated OpenAI client initialization
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
@@ -9,6 +10,7 @@ export async function POST(request: Request) {
   try {
     const { logData } = await request.json();
 
+    // Updated to use the latest model
     const chatCompletion = await client.chat.completions.create({
       messages: [
         {

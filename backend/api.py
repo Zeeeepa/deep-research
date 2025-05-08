@@ -22,7 +22,7 @@ image = (
     modal.Image.debian_slim()
     .apt_install("git")
     .pip_install(
-        "codegen==0.22.1",
+        "codegen==0.30.0",  # Updated to latest version
         "fastapi",
         "uvicorn",
         "langchain",

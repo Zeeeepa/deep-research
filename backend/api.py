@@ -204,7 +204,17 @@ async def get_similar_files(repo_name: str, query: str) -> List[str]:
 
 @fastapi_app.post("/research/stream")
 async def research_stream(request: ResearchRequest):
-    """
+    """Streaming endpoint to perform code research on a GitHub repository."""
+    # Validate repo_name format
+    if not re.match(r'^[\w-]+/[\w-]+$', request.repo_name):
+        raise HTTPException(status_code=400, message="Invalid repository name format")
+    
+    # Validate query content
+    if not request.query.strip():
+        raise HTTPException(status_code=400, message="Query cannot be empty")
+    
+    try:
+        logger.info(f"Starting streaming research for repo: {request.repo_name}")
     Streaming endpoint to perform code research on a GitHub repository.
     
     This endpoint streams the research results as server-sent events (SSE).

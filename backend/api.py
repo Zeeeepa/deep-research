@@ -38,7 +38,14 @@ logger.info(f"Using secret: {AGENT_SECRET_NAME}")
 logger.info(f"Function timeout: {MODAL_FUNCTION_TIMEOUT} seconds")
 
 # Create a Modal stub with the specified name
-stub = modal.Stub(MODAL_APP_NAME)
+try:
+    stub = modal.Stub(MODAL_APP_NAME)
+    logger.info(f"Successfully initialized Modal stub: {MODAL_APP_NAME}")
+except Exception as e:
+    logger.error(f"Failed to initialize Modal stub: {str(e)}", exc_info=True)
+    # Fallback to default configuration if there's an error
+    stub = modal.Stub("code-research-app-fallback")
+    logger.warning("Using fallback Modal stub configuration")
 
 # Define the image with required dependencies
 image = (
@@ -388,5 +395,11 @@ if __name__ == "__main__":
     print("===========================================\n")
     
     # Deploy the app
-    stub.deploy()
+    try:
+        stub.deploy()
+        logger.info(f"Successfully deployed Modal app: {MODAL_APP_NAME}")
+    except Exception as e:
+        logger.error(f"Failed to deploy Modal app: {str(e)}", exc_info=True)
+        print(f"Error deploying Modal app: {str(e)}")
+        exit(1)
 

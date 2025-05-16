@@ -6,7 +6,7 @@ from codegen.extensions.langchain.agent import create_agent_with_tools
 from codegen.extensions.langchain.tools import (
     ListDirectoryTool,
     RevealSymbolTool,
-    SearchTool,
+    RipGrepTool,
     SemanticSearchTool,
     ViewFileTool,
 )
@@ -130,7 +130,7 @@ async def research(request: ResearchRequest) -> ResearchResponse:
         tools = [
             ViewFileTool(codebase),
             ListDirectoryTool(codebase),
-            SearchTool(codebase),
+            RipGrepTool(codebase),
             SemanticSearchTool(codebase),
             RevealSymbolTool(codebase),
         ]
@@ -235,7 +235,7 @@ async def research_stream(request: ResearchRequest):
             tools = [
                 ViewFileTool(codebase),
                 ListDirectoryTool(codebase),
-                SearchTool(codebase),
+                RipGrepTool(codebase),
                 SemanticSearchTool(codebase),
                 RevealSymbolTool(codebase),
             ]

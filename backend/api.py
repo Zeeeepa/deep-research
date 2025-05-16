@@ -19,7 +19,6 @@ from fastapi.responses import StreamingResponse
 import json
 import logging
 import re
-from codegen.exceptions import CodebaseError
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -314,19 +313,19 @@ async def research_stream(request: ResearchRequest):
             media_type="text/event-stream",
         )
     
-    except CodebaseError as e:
-        # Handle codebase-specific errors
-        logger.error(f"Codebase error in research_stream: {str(e)}", exc_info=True)
-        error_status = update_status("Repository error")
-        return StreamingResponse(
-            iter([
-                f"data: {json.dumps(error_status)}\n\n",
-                f"data: {json.dumps({'type': 'error', 'content': f'Repository error: {str(e)}'})}\n\n",
-            ]),
-            media_type="text/event-stream",
-        )
-    
     except Exception as e:
+        # Handle codebase-specific errors
+        if "CodebaseError" in str(type(e)):
+            logger.error(f"Codebase error in research_stream: {str(e)}", exc_info=True)
+            error_status = update_status("Repository error")
+            return StreamingResponse(
+                iter([
+                    f"data: {json.dumps(error_status)}\n\n",
+                    f"data: {json.dumps({'type': 'error', 'content': f'Repository error: {str(e)}'})}\n\n",
+                ]),
+                media_type="text/event-stream",
+            )
+        
         # Handle all other unexpected errors
         logger.error(f"Unhandled exception in research_stream: {str(e)}", exc_info=True)
         error_status = update_status("Error occurred")

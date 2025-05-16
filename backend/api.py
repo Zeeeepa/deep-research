@@ -26,8 +26,6 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Environment variables configuration
-# MODAL_APP_NAME: Name of the Modal app (default: "code-research-app")
-# AGENT_SECRET_NAME: Name of the Modal secret containing API keys (default: "agent-secret")
 MODAL_APP_NAME = os.environ.get("MODAL_APP_NAME", "code-research-app")
 AGENT_SECRET_NAME = os.environ.get("AGENT_SECRET_NAME", "agent-secret")
 MODAL_FUNCTION_TIMEOUT = int(os.environ.get("MODAL_FUNCTION_TIMEOUT", 600))
@@ -52,7 +50,7 @@ image = (
     modal.Image.debian_slim()
     .apt_install("git")
     .pip_install(
-        "codegen==0.30.0",  # Updated to latest version
+        "codegen==0.30.0",
         "fastapi",
         "uvicorn",
         "langchain",
@@ -118,7 +116,6 @@ class FilesResponse(BaseModel):
 class StatusResponse(BaseModel):
     status: str
 
-# ... existing code ...
 
 @fastapi_app.post("/research", response_model=ResearchResponse)
 async def research(request: ResearchRequest) -> ResearchResponse:
@@ -345,7 +342,7 @@ async def research_stream(request: ResearchRequest):
 @stub.function(
     image=image, 
     secrets=[modal.Secret.from_name(AGENT_SECRET_NAME)],
-    timeout=MODAL_FUNCTION_TIMEOUT  # Use configurable timeout
+    timeout=MODAL_FUNCTION_TIMEOUT
 )
 @modal.asgi_app()
 def fastapi_modal_app():

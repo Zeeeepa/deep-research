@@ -6,7 +6,7 @@ from codegen.extensions.langchain.agent import create_agent_with_tools
 from codegen.extensions.langchain.tools import (
     ListDirectoryTool,
     RevealSymbolTool,
-    SearchTool,
+    RipGrepTool,
     SemanticSearchTool,
     ViewFileTool,
 )
@@ -26,8 +26,6 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Environment variables configuration
-# MODAL_APP_NAME: Name of the Modal app (default: "code-research-app")
-# AGENT_SECRET_NAME: Name of the Modal secret containing API keys (default: "agent-secret")
 MODAL_APP_NAME = os.environ.get("MODAL_APP_NAME", "code-research-app")
 AGENT_SECRET_NAME = os.environ.get("AGENT_SECRET_NAME", "agent-secret")
 MODAL_FUNCTION_TIMEOUT = int(os.environ.get("MODAL_FUNCTION_TIMEOUT", 600))
@@ -38,14 +36,21 @@ logger.info(f"Using secret: {AGENT_SECRET_NAME}")
 logger.info(f"Function timeout: {MODAL_FUNCTION_TIMEOUT} seconds")
 
 # Create a Modal stub with the specified name
-stub = modal.Stub(MODAL_APP_NAME)
+try:
+    stub = modal.Stub(MODAL_APP_NAME)
+    logger.info(f"Successfully initialized Modal stub: {MODAL_APP_NAME}")
+except Exception as e:
+    logger.error(f"Failed to initialize Modal stub: {str(e)}", exc_info=True)
+    # Fallback to default configuration if there's an error
+    stub = modal.Stub("code-research-app-fallback")
+    logger.warning("Using fallback Modal stub configuration")
 
 # Define the image with required dependencies
 image = (
     modal.Image.debian_slim()
     .apt_install("git")
     .pip_install(
-        "codegen==0.30.0",  # Updated to latest version
+        "codegen==0.30.0",
         "fastapi",
         "uvicorn",
         "langchain",
@@ -111,18 +116,6 @@ class FilesResponse(BaseModel):
 class StatusResponse(BaseModel):
     status: str
 
-# @fastapi_app.post("/files", response_model=ResearchResponse)
-# async def files(request: ResearchRequest) -> ResearchResponse:
-#     codebase = Codebase.from_repo(request.repo_name)
-
-#     file_index = FileIndex(codebase)
-#     file_index.create()
-
-#     similar_files = file_index.similarity_search(request.query, k=5)
-
-#     similar_file_names = [file.filepath for file, score in similar_files]
-#     return FilesResponse(files=similar_file_names)
-
 
 @fastapi_app.post("/research", response_model=ResearchResponse)
 async def research(request: ResearchRequest) -> ResearchResponse:
@@ -137,7 +130,7 @@ async def research(request: ResearchRequest) -> ResearchResponse:
         tools = [
             ViewFileTool(codebase),
             ListDirectoryTool(codebase),
-            SearchTool(codebase),
+            RipGrepTool(codebase),
             SemanticSearchTool(codebase),
             RevealSymbolTool(codebase),
         ]
@@ -242,7 +235,7 @@ async def research_stream(request: ResearchRequest):
             tools = [
                 ViewFileTool(codebase),
                 ListDirectoryTool(codebase),
-                SearchTool(codebase),
+                RipGrepTool(codebase),
                 SemanticSearchTool(codebase),
                 RevealSymbolTool(codebase),
             ]
@@ -349,7 +342,7 @@ async def research_stream(request: ResearchRequest):
 @stub.function(
     image=image, 
     secrets=[modal.Secret.from_name(AGENT_SECRET_NAME)],
-    timeout=MODAL_FUNCTION_TIMEOUT  # Use configurable timeout
+    timeout=MODAL_FUNCTION_TIMEOUT
 )
 @modal.asgi_app()
 def fastapi_modal_app():
@@ -399,4 +392,11 @@ if __name__ == "__main__":
     print("===========================================\n")
     
     # Deploy the app
-    stub.deploy()
+    try:
+        stub.deploy()
+        logger.info(f"Successfully deployed Modal app: {MODAL_APP_NAME}")
+    except Exception as e:
+        logger.error(f"Failed to deploy Modal app: {str(e)}", exc_info=True)
+        print(f"Error deploying Modal app: {str(e)}")
+        exit(1)
+

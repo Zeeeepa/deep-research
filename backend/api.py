@@ -311,122 +311,105 @@ def calculate_cyclomatic_complexity(function):
     
     if hasattr(function, "code_block") and function.code_block:
         source = function.code_block.source
-        # Count decision points
-        complexity += source.count(" if ") + source.count(" else ") + source.count(" elif ")
+        
+        # Count control flow statements
+        complexity += source.count(" if ") + source.count(" elif ")
         complexity += source.count(" for ") + source.count(" while ")
         complexity += source.count(" and ") + source.count(" or ")
-        complexity += source.count(" try ") + source.count(" except ")
-    
+        complexity += source.count(" except:")
+        
     return complexity
 
-def calculate_halstead_volume(function):
-    """Calculate Halstead volume for a function."""
-    if not hasattr(function, "code_block") or not function.code_block:
+def calculate_halstead_metrics(source: str):
+    """Calculate Halstead complexity metrics."""
+    if not source:
+        return 0, 0
+    
+    # Simplified implementation
+    operators = {
+        "+", "-", "*", "/", "%", "**", "//", 
+        "=", "+=", "-=", "*=", "/=", "%=", "**=", "//=",
+        "==", "!=", ">", "<", ">=", "<=", 
+        "and", "or", "not", "is", "in", "is not", "not in",
+        "(", ")", "[", "]", "{", "}", ":", ".", ",", ";",
+        "if", "elif", "else", "for", "while", "break", "continue", "return",
+        "try", "except", "finally", "raise", "with", "as", "assert",
+        "import", "from", "class", "def", "lambda", "global", "nonlocal",
+        "pass", "yield", "del", "async", "await"
+    }
+    
+    # Count operators and operands
+    n1 = 0  # Number of unique operators
+    n2 = 0  # Number of unique operands
+    N1 = 0  # Total occurrences of operators
+    N2 = 0  # Total occurrences of operands
+    
+    # Very simplified counting
+    words = re.findall(r'\b\w+\b|[^\w\s]+', source)
+    
+    operator_counts = {}
+    operand_counts = {}
+    
+    for word in words:
+        if word in operators:
+            operator_counts[word] = operator_counts.get(word, 0) + 1
+        else:
+            operand_counts[word] = operand_counts.get(word, 0) + 1
+    
+    n1 = len(operator_counts)
+    n2 = len(operand_counts)
+    N1 = sum(operator_counts.values())
+    N2 = sum(operand_counts.values())
+    
+    # Avoid division by zero
+    if n1 == 0 or n2 == 0:
+        return 0, 0
+    
+    # Calculate Halstead metrics
+    vocabulary = n1 + n2
+    length = N1 + N2
+    volume = length * math.log2(vocabulary) if vocabulary > 0 else 0
+    difficulty = (n1 / 2) * (N2 / n2) if n2 > 0 else 0
+    
+    return volume, difficulty
+
+def calculate_maintainability_index(source: str, complexity: int, volume: float):
+    """Calculate maintainability index."""
+    if not source:
         return 0
     
-    source = function.code_block.source
+    # Count lines
+    loc, _, _, _ = count_lines(source)
     
-    # Simple approximation of operators and operands
-    operators = re.findall(r'[\+\-\*/=<>!&|%]|if|else|for|while|return|break|continue', source)
-    operands = re.findall(r'\b[a-zA-Z_][a-zA-Z0-9_]*\b', source)
-    
-    n1 = len(set(operators))  # Unique operators
-    n2 = len(set(operands))   # Unique operands
-    N1 = len(operators)       # Total operators
-    N2 = len(operands)        # Total operands
-    
-    if n1 > 0 and n2 > 0:
-        volume = (N1 + N2) * math.log2(n1 + n2)
-        return volume
-    return 0
-
-def calculate_maintainability_index(halstead_volume, cyclomatic_complexity, loc):
-    """Calculate the maintainability index."""
-    if loc <= 0:
-        return 100
-
-    try:
-        raw_mi = (
-            171
-            - 5.2 * math.log(max(1, halstead_volume))
-            - 0.23 * cyclomatic_complexity
-            - 16.2 * math.log(max(1, loc))
-        )
-        normalized_mi = max(0, min(100, raw_mi * 100 / 171))
-        return int(normalized_mi)
-    except (ValueError, TypeError):
+    # Avoid division by zero or negative logarithms
+    if loc <= 0 or volume <= 0:
         return 0
-
-def calculate_doi(cls):
-    """Calculate the depth of inheritance for a given class."""
-    return len(getattr(cls, "superclasses", []))
-
-def get_github_repo_description(repo_url):
-    """Get repository description from GitHub API."""
-    api_url = f"https://api.github.com/repos/{repo_url}"
     
-    try:
-        response = requests.get(api_url)
-        
-        if response.status_code == 200:
-            repo_data = response.json()
-            return repo_data.get("description", "No description available")
-    except Exception as e:
-        logger.error(f"Error fetching repo description: {str(e)}")
+    # Calculate maintainability index
+    # MI = 171 - 5.2 * ln(volume) - 0.23 * complexity - 16.2 * ln(loc)
+    mi = 171 - 5.2 * math.log(volume) - 0.23 * complexity - 16.2 * math.log(loc)
     
-    return "No description available"
+    # Normalize to 0-100 scale
+    mi_normalized = max(0, min(100, mi * 100 / 171))
+    
+    return mi_normalized
 
-
-@fastapi_app.post("/research", response_model=ResearchResponse)
-async def research(request: ResearchRequest) -> ResearchResponse:
-    """
-    Endpoint to perform code research on a GitHub repository.
-    """
-    try:
-        update_status("Initializing codebase...")
-        codebase = Codebase.from_repo(request.repo_name)
-
-        update_status("Creating research tools...")
-        tools = get_available_tools(codebase)
-
-        update_status("Initializing research agent...")
-        agent = create_agent_with_tools(
-            codebase=codebase,
-            tools=tools,
-            chat_history=[SystemMessage(content=RESEARCH_AGENT_PROMPT)],
-            verbose=True,
-        )
-
-        update_status("Running analysis...")
-        result = agent.invoke(
-            {"input": request.query},
-            config={"configurable": {"session_id": "research"}},
-        )
-
-        update_status("Complete")
-        return ResearchResponse(response=result["output"])
-
-    except Exception as e:
-        update_status("Error occurred")
-        return ResearchResponse(response=f"Error during research: {str(e)}")
-
-
-@fastapi_app.post("/similar-files", response_model=FilesResponse)
-async def similar_files(request: ResearchRequest) -> FilesResponse:
-    """
-    Endpoint to find similar files in a GitHub repository based on a query.
-    """
-    try:
-        codebase = Codebase.from_repo(request.repo_name)
-        file_index = FileIndex(codebase)
-        file_index.create()
-        similar_files = file_index.similarity_search(request.query, k=5)
-        similar_file_names = [file.filepath for file, score in similar_files]
-        return FilesResponse(files=similar_file_names)
-
-    except Exception as e:
-        update_status("Error occurred")
-        return FilesResponse(files=[f"Error finding similar files: {str(e)}"])
+def calculate_depth_of_inheritance(codebase):
+    """Calculate depth of inheritance for classes."""
+    if not hasattr(codebase, "classes") or not codebase.classes:
+        return 0
+    
+    total_depth = 0
+    class_count = 0
+    
+    for cls in codebase.classes:
+        # Simple implementation - just count direct parent classes
+        if hasattr(cls, "bases") and cls.bases:
+            depth = len(cls.bases)
+            total_depth += depth
+            class_count += 1
+    
+    return total_depth / max(1, class_count)  # Avoid division by zero
 
 
 @app.function(
@@ -474,29 +457,47 @@ async def analyze_repo_metrics(repo_url: str) -> Dict[str, Any]:
             total_sloc += sloc
             total_comments += comments
 
-        callables = codebase.functions + [m for c in codebase.classes for m in c.methods]
-
+        # Calculate cyclomatic complexity
         num_callables = 0
-        for func in callables:
-            if not hasattr(func, "code_block"):
-                continue
-
+        for func in codebase.functions:
             complexity = calculate_cyclomatic_complexity(func)
-            volume = calculate_halstead_volume(func)
-            loc = len(func.code_block.source.splitlines())
-            mi_score = calculate_maintainability_index(volume, complexity, loc)
-
             total_complexity += complexity
-            total_volume += volume
-            total_mi += mi_score
             num_callables += 1
 
-        for cls in codebase.classes:
-            doi = calculate_doi(cls)
-            total_doi += doi
+        # Calculate Halstead metrics
+        for file in codebase.files:
+            volume, _ = calculate_halstead_metrics(file.source)
+            total_volume += volume
 
-        desc = get_github_repo_description(repo_url)
+        # Calculate maintainability index
+        for func in codebase.functions:
+            if hasattr(func, "code_block") and func.code_block:
+                source = func.code_block.source
+                complexity = calculate_cyclomatic_complexity(func)
+                volume, _ = calculate_halstead_metrics(source)
+                if volume > 0:
+                    mi = calculate_maintainability_index(source, complexity, volume)
+                    total_mi += mi
 
+        # Calculate depth of inheritance
+        total_doi = calculate_depth_of_inheritance(codebase)
+
+        # Get repository description
+        desc = ""
+        try:
+            repo_owner, repo_name = repo_url.split("/")
+            api_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}"
+            response = requests.get(api_url)
+            if response.status_code == 200:
+                repo_data = response.json()
+                desc = repo_data.get("description", "")
+        except Exception as e:
+            logger.warning(f"Failed to get repository description: {str(e)}")
+
+        # Calculate comment density
+        comment_density = (total_comments / total_loc * 100) if total_loc > 0 else 0
+
+        # Prepare results
         results = {
             "repo_url": repo_url,
             "line_metrics": {
@@ -505,22 +506,18 @@ async def analyze_repo_metrics(repo_url: str) -> Dict[str, Any]:
                     "lloc": total_lloc,
                     "sloc": total_sloc,
                     "comments": total_comments,
-                    "comment_density": (total_comments / total_loc * 100)
-                    if total_loc > 0
-                    else 0,
+                    "comment_density": comment_density,
                 },
             },
             "cyclomatic_complexity": {
                 "average": total_complexity / num_callables if num_callables > 0 else 0,
             },
             "depth_of_inheritance": {
-                "average": total_doi / len(codebase.classes) if codebase.classes else 0,
+                "average": total_doi,
             },
             "halstead_metrics": {
-                "total_volume": int(total_volume),
-                "average_volume": int(total_volume / num_callables)
-                if num_callables > 0
-                else 0,
+                "total_volume": total_volume,
+                "average_volume": total_volume / num_files if num_files > 0 else 0,
             },
             "maintainability_index": {
                 "average": int(total_mi / num_callables) if num_callables > 0 else 0,
@@ -543,7 +540,8 @@ async def analyze_repo(request: RepoRequest) -> Dict[str, Any]:
     """Analyze a repository and return comprehensive metrics."""
     try:
         repo_url = request.repo_url
-        return await analyze_repo_metrics.remote(repo_url)
+        # Call the Modal function directly without using .remote()
+        return await analyze_repo_metrics(repo_url)
     except Exception as e:
         logger.error(f"Error in analyze_repo endpoint: {str(e)}")
         return {"error": str(e)}
@@ -577,7 +575,7 @@ async def research_stream(request: ResearchRequest):
                 logger.info(f"Initiated similar files search for {request.repo_name}")
             except Exception as e:
                 logger.error(f"Error initiating similar files search: {str(e)}")
-                yield f"data: {json.dumps({'type': 'error', 'content': f'Failed to start similar files search: {str(e)}'})}\n\n"
+                yield f"data: {json.dumps({'type': 'error', 'content': f'Failed to start similar files search: {str(e)}'})}\\n\\n"
                 similar_files_future = None
 
             # Initialize codebase
@@ -586,7 +584,7 @@ async def research_stream(request: ResearchRequest):
                 logger.info(f"Successfully initialized codebase from {request.repo_name}")
             except Exception as e:
                 logger.error(f"Error initializing codebase: {str(e)}")
-                yield f"data: {json.dumps({'type': 'error', 'content': f'Failed to initialize codebase: {str(e)}'})}\n\n"
+                yield f"data: {json.dumps({'type': 'error', 'content': f'Failed to initialize codebase: {str(e)}'})}\\n\\n"
                 return
 
             # Create tools
@@ -604,7 +602,7 @@ async def research_stream(request: ResearchRequest):
                 logger.info("Research agent initialized successfully")
             except Exception as e:
                 logger.error(f"Error initializing agent: {str(e)}")
-                yield f"data: {json.dumps({'type': 'error', 'content': f'Failed to initialize research agent: {str(e)}'})}\n\n"
+                yield f"data: {json.dumps({'type': 'error', 'content': f'Failed to initialize research agent: {str(e)}'})}\\n\\n"
                 return
 
             # Start research task
@@ -617,7 +615,7 @@ async def research_stream(request: ResearchRequest):
                 logger.info("Research task started successfully")
             except Exception as e:
                 logger.error(f"Error starting research task: {str(e)}")
-                yield f"data: {json.dumps({'type': 'error', 'content': f'Failed to start research task: {str(e)}'})}\n\n"
+                yield f"data: {json.dumps({'type': 'error', 'content': f'Failed to start research task: {str(e)}'})}\\n\\n"
                 return
 
             # Get similar files results if available
@@ -625,10 +623,10 @@ async def research_stream(request: ResearchRequest):
                 try:
                     similar_files = await similar_files_future
                     logger.info(f"Found {len(similar_files)} similar files")
-                    yield f"data: {json.dumps({'type': 'similar_files', 'content': similar_files})}\n\n"
+                    yield f"data: {json.dumps({'type': 'similar_files', 'content': similar_files})}\\n\\n"
                 except Exception as e:
                     logger.error(f"Error getting similar files: {str(e)}")
-                    yield f"data: {json.dumps({'type': 'error', 'content': f'Failed to get similar files: {str(e)}'})}\n\n"
+                    yield f"data: {json.dumps({'type': 'error', 'content': f'Failed to get similar files: {str(e)}'})}\\n\\n"
 
             # Stream research results
             try:
@@ -638,16 +636,16 @@ async def research_stream(request: ResearchRequest):
                         content = event["data"]["chunk"].content
                         if content:
                             final_response += content
-                            yield f"data: {json.dumps({'type': 'content', 'content': content})}\n\n"
+                            yield f"data: {json.dumps({'type': 'content', 'content': content})}\\n\\n"
                     elif kind in ["on_tool_start", "on_tool_end"]:
-                        yield f"data: {json.dumps({'type': kind, 'data': event['data']})}\n\n"
+                        yield f"data: {json.dumps({'type': kind, 'data': event['data']})}\\n\\n"
             except Exception as e:
                 logger.error(f"Error during research streaming: {str(e)}")
-                yield f"data: {json.dumps({'type': 'error', 'content': f'Error during research: {str(e)}'})}\n\n"
+                yield f"data: {json.dumps({'type': 'error', 'content': f'Error during research: {str(e)}'})}\\n\\n"
 
             # Send completion event
             logger.info("Research completed successfully")
-            yield f"data: {json.dumps({'type': 'complete', 'content': final_response})}\n\n"
+            yield f"data: {json.dumps({'type': 'complete', 'content': final_response})}\\n\\n"
 
         return StreamingResponse(
             event_generator(),
@@ -660,8 +658,8 @@ async def research_stream(request: ResearchRequest):
         error_status = update_status("Validation error")
         return StreamingResponse(
             iter([
-                f"data: {json.dumps(error_status)}\n\n",
-                f"data: {json.dumps({'type': 'error', 'content': f'Invalid input: {str(e)}'})}\n\n",
+                f"data: {json.dumps(error_status)}\\n\\n",
+                f"data: {json.dumps({'type': 'error', 'content': f'Invalid input: {str(e)}'})}\\n\\n",
             ]),
             media_type="text/event-stream",
         )
@@ -673,8 +671,8 @@ async def research_stream(request: ResearchRequest):
             error_status = update_status("Repository error")
             return StreamingResponse(
                 iter([
-                    f"data: {json.dumps(error_status)}\n\n",
-                    f"data: {json.dumps({'type': 'error', 'content': f'Repository error: {str(e)}'})}\n\n",
+                    f"data: {json.dumps(error_status)}\\n\\n",
+                    f"data: {json.dumps({'type': 'error', 'content': f'Repository error: {str(e)}'})}\\n\\n",
                 ]),
                 media_type="text/event-stream",
             )
@@ -684,8 +682,8 @@ async def research_stream(request: ResearchRequest):
         error_status = update_status("Error occurred")
         return StreamingResponse(
             iter([
-                f"data: {json.dumps(error_status)}\n\n",
-                f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n",
+                f"data: {json.dumps(error_status)}\\n\\n",
+                f"data: {json.dumps({'type': 'error', 'content': str(e)})}\\n\\n",
             ]),
             media_type="text/event-stream",
         )
@@ -751,3 +749,4 @@ if __name__ == "__main__":
         logger.error(f"Failed to deploy Modal app: {str(e)}", exc_info=True)
         print(f"Error deploying Modal app: {str(e)}")
         exit(1)
+

@@ -308,7 +308,7 @@ export default function RepoChatDashboard() {
                         ) : similarFiles.length > 0 ? (
                           similarFiles.map((file, i) => {
                             const fileName = file.split('/').pop() || file;
-                            const filePath = file.split('/').slice(0, -1).join('/');
+                            const filePath = file.split('/').slice(0, -1).join('/')
                             return (
                               <Card 
                                 key={i} 
@@ -331,16 +331,13 @@ export default function RepoChatDashboard() {
                             );
                           })
                         ) : (
-                          Array(6).fill(0).map((_, i) => (
-                            <Card 
-                              key={i}
-                              className="p-4 flex flex-col justify-between bg-muted/25 border-none hover:bg-muted transition-colors cursor-pointer rounded-xl"
-                            >
-                              <div className="flex items-center gap-2">
-                                <p className="text-sm font-medium text-muted-foreground">Example file {i + 1}</p>
-                              </div>
-                            </Card>
-                          ))
+                          <Card 
+                            className="p-4 flex flex-col justify-between bg-muted/25 border-none rounded-xl"
+                          >
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-medium text-muted-foreground">No files found</p>
+                            </div>
+                          </Card>
                         )}
                       </div>
                     </div>
@@ -401,4 +398,3 @@ const ApiErrorAlert: React.FC<ApiErrorAlertProps> = ({ error }) => {
         </div>
     );
 };
-

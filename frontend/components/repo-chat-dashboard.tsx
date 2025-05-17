@@ -247,6 +247,18 @@ export default function RepoChatDashboard() {
     }
   }
 
+  const handleNewSearch = () => {
+    setIsLandingPage(true);
+    setRepoUrl("");
+    setQuestion("");
+    setResearchResult("");
+    setLogs([]);
+    setSimilarFiles([]);
+    setApiError(null);
+    setRepoDataRetrieved(false);
+    setIsLoading(false);
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-black to-black text-foreground">
       <div className={`absolute w-full transition-all duration-300 ease-in-out
@@ -299,12 +311,12 @@ export default function RepoChatDashboard() {
           <div className="flex items-center justify-between space-x-4">
             <div 
               className="flex items-center gap-3 cursor-pointer hover:opacity-80" 
-              onClick={() => setIsLandingPage(true)}
+              onClick={handleNewSearch}
             >
               <img src="cg.png" alt="CG Logo" className="h-8 w-8" />
               <h2 className="text-3xl font-bold tracking-tight">Deep Research</h2>
             </div>
-            <Button onClick={() => setIsLandingPage(true)}>
+            <Button onClick={handleNewSearch}>
               <span className="font-semibold">New Search</span>
             </Button>
           </div>

@@ -79,30 +79,50 @@ export default function RepoAnalyticsDashboard({ repoUrl: initialRepoUrl }: Repo
   }, [initialRepoUrl]);
 
   const parseRepoUrl = (input: string): string => {
+    if (!input) return "";
+    
     try {
-      // Handle GitHub URLs
+      // Handle full GitHub URLs
       if (input.includes('github.com')) {
-        const url = new URL(input);
-        const pathParts = url.pathname.split('/').filter(Boolean);
-        if (pathParts.length >= 2) {
-          return `${pathParts[0]}/${pathParts[1]}`;
+        // Remove any trailing slashes, .git, or other problematic suffixes
+        let cleanedInput = input.trim()
+          .replace(/\.git$/, '')
+          .replace(/\/$/, '')
+          .replace(/https:$/, '');
+          
+        // Parse URL properly
+        try {
+          const url = new URL(cleanedInput);
+          const pathParts = url.pathname.split('/').filter(Boolean);
+          if (pathParts.length >= 2) {
+            return `${pathParts[0]}/${pathParts[1]}`;
+          }
+        } catch (e) {
+          console.error('Error parsing URL:', e);
+          // Fall through to other parsing methods
         }
       }
       
-      // Handle owner/repo format
+      // Handle owner/repo format (e.g., "Zeeeepa/deep-research")
       if (input.includes('/') && !input.includes('http')) {
         const parts = input.trim().split('/');
-        if (parts.length === 2) {
+        if (parts.length === 2 && parts[0] && parts[1]) {
           return input.trim();
         }
       }
       
       // Return cleaned input for other cases
-      return input.trim().replace(/https:$/, '');
+      return input.trim()
+        .replace(/\.git$/, '')
+        .replace(/\/$/, '')
+        .replace(/https:$/, '');
     } catch (error) {
       console.error('Error parsing repo URL:', error);
       // Return a cleaned version of the input
-      return input.trim().replace(/https:$/, '');
+      return input.trim()
+        .replace(/\.git$/, '')
+        .replace(/\/$/, '')
+        .replace(/https:$/, '');
     }
   };
 
@@ -169,16 +189,29 @@ export default function RepoAnalyticsDashboard({ repoUrl: initialRepoUrl }: Repo
         numberOfClasses: data.num_classes || 0,
       });
 
+      // Process commit data if available
       if (data.monthly_commits && Object.keys(data.monthly_commits).length > 0) {
-        const transformedCommitData = Object.entries(data.monthly_commits)
-          .map(([date, commits]) => ({
-            month: new Date(date + "-01").toLocaleString('default', { month: 'long' }),
-            commits,
-          }))
-          .slice(0, 12)
-          .reverse();
+        try {
+          const transformedCommitData = Object.entries(data.monthly_commits)
+            .map(([date, commits]) => {
+              try {
+                return {
+                  month: new Date(date + "-01").toLocaleString('default', { month: 'short' }),
+                  commits: typeof commits === 'number' ? commits : 0,
+                };
+              } catch (e) {
+                console.error("Error processing date:", date, e);
+                return { month: date, commits: typeof commits === 'number' ? commits : 0 };
+              }
+            })
+            .slice(-12) // Get last 12 months
+            .reverse();
 
-        setCommitData(transformedCommitData);
+          setCommitData(transformedCommitData);
+        } catch (e) {
+          console.error("Error transforming commit data:", e);
+          setCommitData([]);
+        }
       } else {
         setCommitData([]);
       }

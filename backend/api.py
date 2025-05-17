@@ -34,15 +34,15 @@ logger.info(f"Initializing Modal app with name: {MODAL_APP_NAME}")
 logger.info(f"Using secret: {AGENT_SECRET_NAME}")
 logger.info(f"Function timeout: {MODAL_FUNCTION_TIMEOUT} seconds")
 
-# Create a Modal stub with the specified name
+# Create a Modal app with the specified name
 try:
-    stub = modal.Stub(MODAL_APP_NAME)
-    logger.info(f"Successfully initialized Modal stub: {MODAL_APP_NAME}")
+    app = modal.App(MODAL_APP_NAME)
+    logger.info(f"Successfully initialized Modal app: {MODAL_APP_NAME}")
 except Exception as e:
-    logger.error(f"Failed to initialize Modal stub: {str(e)}", exc_info=True)
+    logger.error(f"Failed to initialize Modal app: {str(e)}", exc_info=True)
     # Fallback to default configuration if there's an error
-    stub = modal.Stub("code-research-app-fallback")
-    logger.warning("Using fallback Modal stub configuration")
+    app = modal.App("code-research-app-fallback")
+    logger.warning("Using fallback Modal app configuration")
 
 # Define the image with required dependencies
 image = (
@@ -174,7 +174,7 @@ async def similar_files(request: ResearchRequest) -> FilesResponse:
         return FilesResponse(files=[f"Error finding similar files: {str(e)}"])
 
 
-@stub.function(
+@app.function(
     image=image,
     secrets=[modal.Secret.from_name(AGENT_SECRET_NAME)],
     timeout=MODAL_FUNCTION_TIMEOUT
@@ -338,7 +338,7 @@ async def research_stream(request: ResearchRequest):
         )
 
 
-@stub.function(
+@app.function(
     image=image, 
     secrets=[modal.Secret.from_name(AGENT_SECRET_NAME)],
     timeout=MODAL_FUNCTION_TIMEOUT
@@ -392,7 +392,7 @@ if __name__ == "__main__":
     
     # Deploy the app
     try:
-        stub.deploy()
+        app.deploy()
         logger.info(f"Successfully deployed Modal app: {MODAL_APP_NAME}")
     except Exception as e:
         logger.error(f"Failed to deploy Modal app: {str(e)}", exc_info=True)

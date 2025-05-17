@@ -34,14 +34,8 @@ logger.info(f"Using secret: {AGENT_SECRET_NAME}")
 logger.info(f"Function timeout: {MODAL_FUNCTION_TIMEOUT} seconds")
 
 # Create a Modal app with the specified name
-try:
-    app = modal.App(MODAL_APP_NAME)
-    logger.info(f"Successfully initialized Modal app: {MODAL_APP_NAME}")
-except Exception as e:
-    logger.error(f"Failed to initialize Modal app: {str(e)}", exc_info=True)
-    # Fallback to default configuration if there's an error
-    app = modal.App("code-research-app-fallback")
-    logger.warning("Using fallback Modal app configuration")
+app = modal.App(MODAL_APP_NAME)
+logger.info(f"Successfully initialized Modal app: {MODAL_APP_NAME}")
 
 # Define the image with required dependencies
 image = (
@@ -575,7 +569,7 @@ async def research_stream(request: ResearchRequest):
                 logger.info(f"Initiated similar files search for {request.repo_name}")
             except Exception as e:
                 logger.error(f"Error initiating similar files search: {str(e)}")
-                yield f"data: {json.dumps({'type': 'error', 'content': f'Failed to start similar files search: {str(e)}'})}\\n\\n"
+                yield f"data: {json.dumps({'type': 'error', 'content': f'Failed to start similar files search: {str(e)}'})}\n\n"
                 similar_files_future = None
 
             # Initialize codebase
@@ -584,7 +578,7 @@ async def research_stream(request: ResearchRequest):
                 logger.info(f"Successfully initialized codebase from {request.repo_name}")
             except Exception as e:
                 logger.error(f"Error initializing codebase: {str(e)}")
-                yield f"data: {json.dumps({'type': 'error', 'content': f'Failed to initialize codebase: {str(e)}'})}\\n\\n"
+                yield f"data: {json.dumps({'type': 'error', 'content': f'Failed to initialize codebase: {str(e)}'})}\n\n"
                 return
 
             # Create tools
@@ -602,7 +596,7 @@ async def research_stream(request: ResearchRequest):
                 logger.info("Research agent initialized successfully")
             except Exception as e:
                 logger.error(f"Error initializing agent: {str(e)}")
-                yield f"data: {json.dumps({'type': 'error', 'content': f'Failed to initialize research agent: {str(e)}'})}\\n\\n"
+                yield f"data: {json.dumps({'type': 'error', 'content': f'Failed to initialize research agent: {str(e)}'})}\n\n"
                 return
 
             # Start research task
@@ -615,7 +609,7 @@ async def research_stream(request: ResearchRequest):
                 logger.info("Research task started successfully")
             except Exception as e:
                 logger.error(f"Error starting research task: {str(e)}")
-                yield f"data: {json.dumps({'type': 'error', 'content': f'Failed to start research task: {str(e)}'})}\\n\\n"
+                yield f"data: {json.dumps({'type': 'error', 'content': f'Failed to start research task: {str(e)}'})}\n\n"
                 return
 
             # Get similar files results if available
@@ -623,10 +617,10 @@ async def research_stream(request: ResearchRequest):
                 try:
                     similar_files = await similar_files_future
                     logger.info(f"Found {len(similar_files)} similar files")
-                    yield f"data: {json.dumps({'type': 'similar_files', 'content': similar_files})}\\n\\n"
+                    yield f"data: {json.dumps({'type': 'similar_files', 'content': similar_files})}\n\n"
                 except Exception as e:
                     logger.error(f"Error getting similar files: {str(e)}")
-                    yield f"data: {json.dumps({'type': 'error', 'content': f'Failed to get similar files: {str(e)}'})}\\n\\n"
+                    yield f"data: {json.dumps({'type': 'error', 'content': f'Failed to get similar files: {str(e)}'})}\n\n"
 
             # Stream research results
             try:
@@ -636,16 +630,16 @@ async def research_stream(request: ResearchRequest):
                         content = event["data"]["chunk"].content
                         if content:
                             final_response += content
-                            yield f"data: {json.dumps({'type': 'content', 'content': content})}\\n\\n"
+                            yield f"data: {json.dumps({'type': 'content', 'content': content})}\n\n"
                     elif kind in ["on_tool_start", "on_tool_end"]:
-                        yield f"data: {json.dumps({'type': kind, 'data': event['data']})}\\n\\n"
+                        yield f"data: {json.dumps({'type': kind, 'data': event['data']})}\n\n"
             except Exception as e:
                 logger.error(f"Error during research streaming: {str(e)}")
-                yield f"data: {json.dumps({'type': 'error', 'content': f'Error during research: {str(e)}'})}\\n\\n"
+                yield f"data: {json.dumps({'type': 'error', 'content': f'Error during research: {str(e)}'})}\n\n"
 
             # Send completion event
             logger.info("Research completed successfully")
-            yield f"data: {json.dumps({'type': 'complete', 'content': final_response})}\\n\\n"
+            yield f"data: {json.dumps({'type': 'complete', 'content': final_response})}\n\n"
 
         return StreamingResponse(
             event_generator(),
@@ -658,8 +652,8 @@ async def research_stream(request: ResearchRequest):
         error_status = update_status("Validation error")
         return StreamingResponse(
             iter([
-                f"data: {json.dumps(error_status)}\\n\\n",
-                f"data: {json.dumps({'type': 'error', 'content': f'Invalid input: {str(e)}'})}\\n\\n",
+                f"data: {json.dumps(error_status)}\n\n",
+                f"data: {json.dumps({'type': 'error', 'content': f'Invalid input: {str(e)}'})}\n\n",
             ]),
             media_type="text/event-stream",
         )
@@ -671,8 +665,8 @@ async def research_stream(request: ResearchRequest):
             error_status = update_status("Repository error")
             return StreamingResponse(
                 iter([
-                    f"data: {json.dumps(error_status)}\\n\\n",
-                    f"data: {json.dumps({'type': 'error', 'content': f'Repository error: {str(e)}'})}\\n\\n",
+                    f"data: {json.dumps(error_status)}\n\n",
+                    f"data: {json.dumps({'type': 'error', 'content': f'Repository error: {str(e)}'})}\n\n",
                 ]),
                 media_type="text/event-stream",
             )
@@ -682,8 +676,8 @@ async def research_stream(request: ResearchRequest):
         error_status = update_status("Error occurred")
         return StreamingResponse(
             iter([
-                f"data: {json.dumps(error_status)}\\n\\n",
-                f"data: {json.dumps({'type': 'error', 'content': str(e)})}\\n\\n",
+                f"data: {json.dumps(error_status)}\n\n",
+                f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n",
             ]),
             media_type="text/event-stream",
         )
@@ -723,7 +717,7 @@ if __name__ == "__main__":
         
     Frontend Environment Variables:
         NEXT_PUBLIC_MODAL_API_URL: URL to the deployed Modal app's streaming endpoint
-            Example: "https://codegen-sh--code-research-app-fastapi-modal-app.modal.run/research/stream"
+            Example: "https://zeeeepa--code-research-app-fastapi-modal-app.modal.run/research/stream"
             This should be set in the frontend .env file or deployment environment.
     """
     logger.info(f"Deploying Modal app: {MODAL_APP_NAME}")
@@ -737,7 +731,7 @@ if __name__ == "__main__":
     print("  MODAL_FUNCTION_TIMEOUT: Timeout in seconds for the function (default: 600)")
     print("\nFrontend Environment Variables:")
     print("  NEXT_PUBLIC_MODAL_API_URL: URL to the deployed Modal app's streaming endpoint")
-    print("    Example: 'https://codegen-sh--code-research-app-fastapi-modal-app.modal.run/research/stream'")
+    print("    Example: 'https://zeeeepa--code-research-app-fastapi-modal-app.modal.run/research/stream'")
     print("    This should be set in the frontend .env file or deployment environment.")
     print("===========================================\n")
     

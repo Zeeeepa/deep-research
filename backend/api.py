@@ -583,32 +583,7 @@ def calculate_line_metrics(codebase):
         }
     }
 
-def get_monthly_commits(codebase):
-    """Get monthly commit counts for the past year."""
-    try:
-        # This is a simplified implementation
-        # In a real implementation, you would use Git commands to get actual commit history
-        
-        # Generate random commit data for the past 12 months
-        now = datetime.now()
-        monthly_commits = {}
-        
-        for i in range(12):
-            month = now.month - i
-            year = now.year
-            
-            if month <= 0:
-                month += 12
-                year -= 1
-            
-            month_name = f"{year}-{month:02d}"
-            # Generate a random number of commits between 5 and 50
-            monthly_commits[month_name] = np.random.randint(5, 50)
-        
-        return monthly_commits
-    except Exception as e:
-        logger.warning(f"Error getting monthly commits: {str(e)}")
-        return {}
+
 
 @fastapi_app.post("/research", response_model=ResearchResponse)
 async def research(request: ResearchRequest) -> ResearchResponse:
@@ -809,7 +784,7 @@ async def analyze_repo(request: RepoAnalyticsRequest) -> RepoAnalyticsResponse:
         depth_of_inheritance = calculate_doi(codebase)
         
         # Get monthly commits
-        monthly_commits = get_monthly_commits(codebase)
+        monthly_commits = get_monthly_commits(request.repo_url)
         
         # Count files, functions, and classes
         num_files = count_files(codebase)

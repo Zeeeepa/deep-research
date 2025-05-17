@@ -61,8 +61,8 @@ export default function RepoAnalyticsDashboard() {
   const [hoveredCard, setHoveredCard] = useState<string | null>(null)
   const [commitData, setCommitData] = useState<CommitData[]>([])
   const [isLoading, setIsLoading] = useState(false)
-  const [isLandingPage, setIsLandingPage] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [repoDataRetrieved, setRepoDataRetrieved] = useState(false)
 
   const parseRepoUrl = (input: string): string => {
     if (input.includes('github.com')) {
@@ -85,7 +85,6 @@ export default function RepoAnalyticsDashboard() {
     console.log("Analyzing repository:", parsedRepoUrl);
     
     setIsLoading(true);
-    setIsLandingPage(false);
     setError(null);
     
     try {
@@ -147,10 +146,11 @@ export default function RepoAnalyticsDashboard() {
       } else {
         setCommitData([]);
       }
+      
+      setRepoDataRetrieved(true);
     } catch (error) {
       console.error('Error fetching repo data:', error);
       setError(error instanceof Error ? error.message : 'Failed to fetch repository data');
-      setIsLandingPage(true);
     } finally {
       setIsLoading(false);
     }
@@ -189,14 +189,13 @@ export default function RepoAnalyticsDashboard() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      {isLandingPage ? (
-        <div className="flex flex-col items-center justify-center min-h-screen p-4">
+      {!repoDataRetrieved ? (
+        <div className="flex flex-col items-center justify-center min-h-[calc(100vh-12rem)] p-4">
           <div className="text-center mb-8">
-            <h1 className="text-4xl font-bold flex items-center justify-center gap-3 mb-4">
-              <img src="cg.png" alt="CG Logo" className="h-12 w-12" />
-              <span>Codebase Analytics</span>
+            <h1 className="text-2xl font-bold mb-4">
+              Analyze Repository
             </h1>
-            <p className="text-muted-foreground">Effortlessly calculate GitHub repository metrics in seconds</p>
+            <p className="text-muted-foreground mb-6">Enter a GitHub repository to view detailed code metrics</p>
           </div>
           <div className="flex items-center gap-3 w-full max-w-lg">
             <Input
@@ -220,12 +219,9 @@ export default function RepoAnalyticsDashboard() {
               {error}
             </div>
           )}
-          <footer className="absolute bottom-0 w-full text-center text-xs text-muted-foreground py-4">
-            built with <a href="https://codegen.com" target="_blank" rel="noopener noreferrer" className="hover:text-primary">Codegen</a>
-          </footer>
         </div>
       ) : isLoading ? (
-        <div className="flex flex-col items-center justify-center min-h-screen">
+        <div className="flex flex-col items-center justify-center min-h-[calc(100vh-12rem)]">
           <div className="text-center mb-8">
             <h2 className="text-2xl font-bold mb-4">Analyzing Repository</h2>
             <p className="text-muted-foreground">Please wait while we calculate codebase metrics with Codegen...</p>
@@ -240,7 +236,7 @@ export default function RepoAnalyticsDashboard() {
                 <div className="flex-shrink-0">
                   <h1
                     className="text-2xl font-bold flex items-center space-x-3 cursor-pointer"
-                    onClick={() => setIsLandingPage(true)}
+                    onClick={() => setRepoDataRetrieved(false)}
                   >
                     <img src="cg.png" alt="CG Logo" className="h-8 w-8" />
                     <span>Codebase Analytics</span>
@@ -439,12 +435,12 @@ export default function RepoAnalyticsDashboard() {
           </footer>
         </div>
       ) : (
-        <div className="flex flex-col items-center justify-center min-h-screen">
+        <div className="flex flex-col items-center justify-center min-h-[calc(100vh-12rem)]">
           <div className="text-center mb-8">
             <h2 className="text-2xl font-bold mb-4">No Data Available</h2>
             <p className="text-muted-foreground">Please enter a repository URL to analyze</p>
             <Button 
-              onClick={() => setIsLandingPage(true)} 
+              onClick={() => setRepoDataRetrieved(false)} 
               className="mt-4"
             >
               Return to Search

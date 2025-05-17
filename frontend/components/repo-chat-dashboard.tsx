@@ -37,20 +37,12 @@ export default function RepoChatDashboard() {
   const [isLoading, setIsLoading] = useState(false)
   const [isLandingPage, setIsLandingPage] = useState(true)
   const [researchResult, setResearchResult] = useState<string>("")
-  const [showQueryInput, setShowQueryInput] = useState(false)
   const [isTransitioning, setIsTransitioning] = useState(false)
   const [logs, setLogs] = useState<string[]>([])
   const [similarFiles, setSimilarFiles] = useState<string[]>([])
   const [apiError, setApiError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState("research")
-
-  useEffect(() => {
-    if (repoUrl) {
-      setShowQueryInput(true)
-    } else {
-      setShowQueryInput(false)
-    }
-  }, [repoUrl])
+  const [repoDataRetrieved, setRepoDataRetrieved] = useState(false)
 
   const parseRepoUrl = (input: string): string => {
     if (input.includes('github.com')) {
@@ -197,6 +189,21 @@ export default function RepoChatDashboard() {
     }
   }
 
+  const handleRepoSubmit = () => {
+    if (!repoUrl) {
+      alert('Please enter a repository URL');
+      return;
+    }
+    setIsLandingPage(false);
+    setRepoDataRetrieved(true);
+  }
+
+  const handleRepoKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleRepoSubmit();
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-black to-black text-foreground">
       <div className={`absolute w-full transition-all duration-300 ease-in-out
@@ -216,38 +223,25 @@ export default function RepoChatDashboard() {
             </p>
           </div>
           <div className="flex flex-col gap-3 w-full max-w-xl px-8">
-            <Input
-              type="text"
-              placeholder="GitHub repo link or owner/repo"
-              value={repoUrl}
-              onChange={(e) => setRepoUrl(e.target.value)}
-              className="flex-1 h-25 text-lg px-4 mb-2 bg-[#050505] text-muted-foreground"
-              title="Format: https://github.com/owner/repo or owner/repo"
-            />
-            <div
-              className={`transition-all duration-500 ease-in-out ${
-                showQueryInput ? 'max-h-40 opacity-100' : 'max-h-0 opacity-0'
-              }`}
-            >
-              <div className="flex gap-2">
-                <Input
-                  type="text"
-                  placeholder="Ask Deep Research anything about the codebase"
-                  value={question}
-                  onChange={(e) => setQuestion(e.target.value)}
-                  onKeyPress={handleKeyPress}
-                  className="flex-1 h-25 text-lg px-4 mb-2 bg-[#050505] text-muted-foreground"
-                />
-                <Button 
-                  onClick={handleSubmit} 
-                  disabled={isLoading || !repoUrl || !question}
-                  className="mb-2"
-                >
-                  <span className="font-semibold flex items-center gap-2">
-                    {isLoading ? "Loading..." : <>Explore <ChevronRight className="h-4 w-4" /></>}
-                  </span>
-                </Button>
-              </div>
+            <div className="flex gap-2">
+              <Input
+                type="text"
+                placeholder="GitHub repo link or owner/repo"
+                value={repoUrl}
+                onChange={(e) => setRepoUrl(e.target.value)}
+                onKeyPress={handleRepoKeyPress}
+                className="flex-1 h-25 text-lg px-4 mb-2 bg-[#050505] text-muted-foreground"
+                title="Format: https://github.com/owner/repo or owner/repo"
+              />
+              <Button 
+                onClick={handleRepoSubmit} 
+                disabled={isLoading || !repoUrl}
+                className="mb-2"
+              >
+                <span className="font-semibold flex items-center gap-2">
+                  {isLoading ? "Loading..." : <>Analyze <ChevronRight className="h-4 w-4" /></>}
+                </span>
+              </Button>
             </div>
             <div className="flex justify-center">
               <Tabs defaultValue="research" className="w-full mt-5" onValueChange={setActiveTab}>
@@ -291,7 +285,7 @@ export default function RepoChatDashboard() {
           <div className="min-h-[calc(100vh-12rem)] animate-in fade-in slide-in-from-bottom-4 duration-500 fill-mode-forwards [animation-delay:600ms]">
             <Card className="h-full border-0">
               <CardHeader>
-                <CardTitle className="text-2xl">{question || "No query provided"}</CardTitle>
+                <CardTitle className="text-2xl">{question || "Repository Analysis"}</CardTitle>
                 <div className="flex items-center gap-2 text-md text-muted-foreground">
                   <Github className="h-4 w-4" />
                   <a 
@@ -308,24 +302,26 @@ export default function RepoChatDashboard() {
                 <div className="space-y-6">
                   {activeTab === "research" && (
                     <>
-                      <div className="flex gap-2 mb-4">
-                        <Input
-                          type="text"
-                          placeholder="Ask Deep Research anything about the codebase"
-                          value={question}
-                          onChange={(e) => setQuestion(e.target.value)}
-                          onKeyPress={handleKeyPress}
-                          className="flex-1"
-                        />
-                        <Button 
-                          onClick={handleSubmit} 
-                          disabled={isLoading || !repoUrl || !question}
-                        >
-                          <span className="font-semibold flex items-center gap-2">
-                            {isLoading ? "Loading..." : <>Explore <ChevronRight className="h-4 w-4" /></>}
-                          </span>
-                        </Button>
-                      </div>
+                      {repoDataRetrieved && (
+                        <div className="flex gap-2 mb-4">
+                          <Input
+                            type="text"
+                            placeholder="Ask Deep Research anything about the codebase"
+                            value={question}
+                            onChange={(e) => setQuestion(e.target.value)}
+                            onKeyPress={handleKeyPress}
+                            className="flex-1"
+                          />
+                          <Button 
+                            onClick={handleSubmit} 
+                            disabled={isLoading || !repoUrl || !question}
+                          >
+                            <span className="font-semibold flex items-center gap-2">
+                              {isLoading ? "Loading..." : <>Explore <ChevronRight className="h-4 w-4" /></>}
+                            </span>
+                          </Button>
+                        </div>
+                      )}
 
                       {researchResult && (
                         <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-500">
@@ -391,32 +387,42 @@ export default function RepoChatDashboard() {
                         </div>
                       )}
 
-                      <div className="space-y-3">
-                        <h3 className="text-lg font-semibold">Agent Logs</h3>
-                        <div className="space-y-2">
-                          {logs.map((log, index) => (
-                            <div 
-                              key={index} 
-                              className="flex items-center gap-2 text-sm text-muted-foreground slide-in-from-bottom-2"
-                              style={{ animationDelay: `${index * 150}ms` }}
-                            >
-                              {index === logs.length - 1 && isLoading ? (
-                                <img 
-                                  src="cg.png" 
-                                  alt="CG Logo" 
-                                  className="h-4 w-4 animate-spin"
-                                  style={{ animationDuration: '0.5s' }}
-                                />
-                              ) : (
-                                <div className="flex items-center">
-                                  <span>→</span>
-                                </div>
-                              )}
-                              {log}
-                            </div>
-                          ))}
+                      {logs.length > 0 && (
+                        <div className="space-y-3">
+                          <h3 className="text-lg font-semibold">Agent Logs</h3>
+                          <div className="space-y-2">
+                            {logs.map((log, index) => (
+                              <div 
+                                key={index} 
+                                className="flex items-center gap-2 text-sm text-muted-foreground slide-in-from-bottom-2"
+                                style={{ animationDelay: `${index * 150}ms` }}
+                              >
+                                {index === logs.length - 1 && isLoading ? (
+                                  <img 
+                                    src="cg.png" 
+                                    alt="CG Logo" 
+                                    className="h-4 w-4 animate-spin"
+                                    style={{ animationDuration: '0.5s' }}
+                                  />
+                                ) : (
+                                  <div className="flex items-center">
+                                    <span>→</span>
+                                  </div>
+                                )}
+                                {log}
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                      </div>
+                      )}
+
+                      {!repoDataRetrieved && !researchResult && !isLoading && (
+                        <div className="flex flex-col items-center justify-center py-12">
+                          <p className="text-muted-foreground text-center mb-4">
+                            Enter a repository URL to start exploring the codebase
+                          </p>
+                        </div>
+                      )}
                     </>
                   )}
 

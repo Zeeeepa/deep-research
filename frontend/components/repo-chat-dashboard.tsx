@@ -1,11 +1,13 @@
 "use client"
 
 import { useState, useEffect} from "react"
-import { Github, ArrowRight, FileText } from "lucide-react"
+import { Github, ArrowRight, FileText, BarChart3, ChevronRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import ReactMarkdown from 'react-markdown'
+import RepoAnalyticsDashboard from "./repo-analytics-dashboard"
 
 async function cleanLogWithGPT4Mini(logData: string): Promise<string> {
   try {
@@ -40,6 +42,7 @@ export default function RepoChatDashboard() {
   const [logs, setLogs] = useState<string[]>([])
   const [similarFiles, setSimilarFiles] = useState<string[]>([])
   const [apiError, setApiError] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState("research")
 
   useEffect(() => {
     if (repoUrl) {
@@ -65,6 +68,11 @@ export default function RepoChatDashboard() {
       alert('Please enter a repository URL');
       return;
     }
+    if (!question) {
+      alert('Please enter a question about the codebase');
+      return;
+    }
+    
     setIsLoading(true);
     setIsLandingPage(false);
     setResearchResult("");
@@ -221,25 +229,33 @@ export default function RepoChatDashboard() {
                 showQueryInput ? 'max-h-40 opacity-100' : 'max-h-0 opacity-0'
               }`}
             >
-              <Input
-                type="text"
-                placeholder="Ask Deep Research anything about the codebase"
-                value={question}
-                onChange={(e) => setQuestion(e.target.value)}
-                onKeyPress={handleKeyPress}
-                 className="flex-1 h-25 text-lg px-4 mb-2 bg-[#050505] text-muted-foreground"
-              />
+              <div className="flex gap-2">
+                <Input
+                  type="text"
+                  placeholder="Ask Deep Research anything about the codebase"
+                  value={question}
+                  onChange={(e) => setQuestion(e.target.value)}
+                  onKeyPress={handleKeyPress}
+                  className="flex-1 h-25 text-lg px-4 mb-2 bg-[#050505] text-muted-foreground"
+                />
+                <Button 
+                  onClick={handleSubmit} 
+                  disabled={isLoading || !repoUrl || !question}
+                  className="mb-2"
+                >
+                  <span className="font-semibold flex items-center gap-2">
+                    {isLoading ? "Loading..." : <>Explore <ChevronRight className="h-4 w-4" /></>}
+                  </span>
+                </Button>
+              </div>
             </div>
             <div className="flex justify-center">
-              <Button 
-                onClick={handleSubmit} 
-                disabled={isLoading || !repoUrl || !question}
-                className="w-32 mt-5"
-              >
-                <span className="font-semibold flex items-center gap-2">
-                  {isLoading ? "Loading..." : <>Explore <ArrowRight className="h-4 w-4" /></>}
-                </span>
-              </Button>
+              <Tabs defaultValue="research" className="w-full mt-5" onValueChange={setActiveTab}>
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="research">Research</TabsTrigger>
+                  <TabsTrigger value="analytics">Analytics</TabsTrigger>
+                </TabsList>
+              </Tabs>
             </div>
           </div>
         </div>
@@ -259,9 +275,17 @@ export default function RepoChatDashboard() {
               <img src="cg.png" alt="CG Logo" className="h-8 w-8" />
               <h2 className="text-3xl font-bold tracking-tight">Deep Research</h2>
             </div>
-            <Button onClick={() => setIsLandingPage(true)}>
-              <span className="font-semibold">New Search</span>
-            </Button>
+            <div className="flex items-center gap-4">
+              <Tabs value={activeTab} className="w-[400px]" onValueChange={setActiveTab}>
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="research">Research</TabsTrigger>
+                  <TabsTrigger value="analytics">Analytics</TabsTrigger>
+                </TabsList>
+              </Tabs>
+              <Button onClick={() => setIsLandingPage(true)}>
+                <span className="font-semibold">New Search</span>
+              </Button>
+            </div>
           </div>
           <br></br>
           <div className="min-h-[calc(100vh-12rem)] animate-in fade-in slide-in-from-bottom-4 duration-500 fill-mode-forwards [animation-delay:600ms]">
@@ -282,96 +306,125 @@ export default function RepoChatDashboard() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-6">
-                  {researchResult && (
-                    <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-500">
-                      <Card className="bg-muted/25 border-none rounded-xl">
-                        <CardContent className="pt-6 prose prose-sm max-w-none">
-                          <ReactMarkdown className="text-white text-md">{researchResult}</ReactMarkdown>
-                        </CardContent>
-                      </Card>
-                    </div>
-                  )}
-
-                  {researchResult && (
-                    <div className="space-y-3">
-                      <h3 className="text-lg font-semibold">Relevant Files</h3>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        {isLoading && !similarFiles.length ? (
-                          Array(3).fill(0).map((_, i) => (
-                            <Card 
-                              key={i} 
-                              className="h-24 flex items-center justify-center bg-muted/25 border-none rounded-xl"
-                            >
-                              <p className="text-sm text-muted-foreground">Loading...</p>
-                            </Card>
-                          ))
-                        ) : similarFiles.length > 0 ? (
-                          similarFiles.map((file, i) => {
-                            const fileName = file.split('/').pop() || file;
-                            const filePath = file.split('/').slice(0, -1).join('/');
-                            return (
-                              <Card 
-                                key={i} 
-                                className="p-4 flex flex-col justify-between bg-muted/25 border-none hover:bg-muted transition-colors cursor-pointer rounded-xl animate-in fade-in slide-in-from-bottom-2 duration-500"
-                                style={{ animationDelay: `${i * 100}ms` }}
-                                onClick={() => window.open(`https://github.com/${parseRepoUrl(repoUrl)}/blob/main/${file}`, '_blank')}
-                              >
-                                <div className="flex flex-col gap-2">
-                                  <div className="flex items-center gap-2">
-                                    <FileText className="h-4 w-4 flex-shrink-0" />
-                                    <div>
-                                      <p className="text-sm font-medium break-words">{fileName}</p>
-                                      {filePath && (
-                                        <p className="text-xs text-muted-foreground break-words">{filePath}</p>
-                                      )}
-                                    </div>
-                                  </div>
-                                </div>
-                              </Card>
-                            );
-                          })
-                        ) : (
-                          Array(6).fill(0).map((_, i) => (
-                            <Card 
-                              key={i}
-                              className="p-4 flex flex-col justify-between bg-muted/25 border-none hover:bg-muted transition-colors cursor-pointer rounded-xl"
-                            >
-                              <div className="flex items-center gap-2">
-                                <p className="text-sm font-medium text-muted-foreground">Example file {i + 1}</p>
-                              </div>
-                            </Card>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="space-y-3">
-                    <h3 className="text-lg font-semibold">Agent Logs</h3>
-                    <div className="space-y-2">
-                      {logs.map((log, index) => (
-                        <div 
-                          key={index} 
-                          className="flex items-center gap-2 text-sm text-muted-foreground slide-in-from-bottom-2"
-                          style={{ animationDelay: `${index * 150}ms` }}
+                  {activeTab === "research" && (
+                    <>
+                      <div className="flex gap-2 mb-4">
+                        <Input
+                          type="text"
+                          placeholder="Ask Deep Research anything about the codebase"
+                          value={question}
+                          onChange={(e) => setQuestion(e.target.value)}
+                          onKeyPress={handleKeyPress}
+                          className="flex-1"
+                        />
+                        <Button 
+                          onClick={handleSubmit} 
+                          disabled={isLoading || !repoUrl || !question}
                         >
-                          {index === logs.length - 1 && isLoading ? (
-                            <img 
-                              src="cg.png" 
-                              alt="CG Logo" 
-                              className="h-4 w-4 animate-spin"
-                              style={{ animationDuration: '0.5s' }}
-                            />
-                          ) : (
-                            <div className="flex items-center">
-                              <span>→</span>
-                            </div>
-                          )}
-                          {log}
+                          <span className="font-semibold flex items-center gap-2">
+                            {isLoading ? "Loading..." : <>Explore <ChevronRight className="h-4 w-4" /></>}
+                          </span>
+                        </Button>
+                      </div>
+
+                      {researchResult && (
+                        <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-500">
+                          <Card className="bg-muted/25 border-none rounded-xl">
+                            <CardContent className="pt-6 prose prose-sm max-w-none">
+                              <ReactMarkdown className="text-white text-md">{researchResult}</ReactMarkdown>
+                            </CardContent>
+                          </Card>
                         </div>
-                      ))}
+                      )}
+
+                      {researchResult && (
+                        <div className="space-y-3">
+                          <h3 className="text-lg font-semibold">Relevant Files</h3>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            {isLoading && !similarFiles.length ? (
+                              Array(3).fill(0).map((_, i) => (
+                                <Card 
+                                  key={i} 
+                                  className="h-24 flex items-center justify-center bg-muted/25 border-none rounded-xl"
+                                >
+                                  <p className="text-sm text-muted-foreground">Loading...</p>
+                                </Card>
+                              ))
+                            ) : similarFiles.length > 0 ? (
+                              similarFiles.map((file, i) => {
+                                const fileName = file.split('/').pop() || file;
+                                const filePath = file.split('/').slice(0, -1).join('/');
+                                return (
+                                  <Card 
+                                    key={i} 
+                                    className="p-4 flex flex-col justify-between bg-muted/25 border-none hover:bg-muted transition-colors cursor-pointer rounded-xl animate-in fade-in slide-in-from-bottom-2 duration-500"
+                                    style={{ animationDelay: `${i * 100}ms` }}
+                                    onClick={() => window.open(`https://github.com/${parseRepoUrl(repoUrl)}/blob/main/${file}`, '_blank')}
+                                  >
+                                    <div className="flex flex-col gap-2">
+                                      <div className="flex items-center gap-2">
+                                        <FileText className="h-4 w-4 flex-shrink-0" />
+                                        <div>
+                                          <p className="text-sm font-medium break-words">{fileName}</p>
+                                          {filePath && (
+                                            <p className="text-xs text-muted-foreground break-words">{filePath}</p>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </Card>
+                                );
+                              })
+                            ) : (
+                              Array(6).fill(0).map((_, i) => (
+                                <Card 
+                                  key={i}
+                                  className="p-4 flex flex-col justify-between bg-muted/25 border-none hover:bg-muted transition-colors cursor-pointer rounded-xl"
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <p className="text-sm font-medium text-muted-foreground">Example file {i + 1}</p>
+                                  </div>
+                                </Card>
+                              ))
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="space-y-3">
+                        <h3 className="text-lg font-semibold">Agent Logs</h3>
+                        <div className="space-y-2">
+                          {logs.map((log, index) => (
+                            <div 
+                              key={index} 
+                              className="flex items-center gap-2 text-sm text-muted-foreground slide-in-from-bottom-2"
+                              style={{ animationDelay: `${index * 150}ms` }}
+                            >
+                              {index === logs.length - 1 && isLoading ? (
+                                <img 
+                                  src="cg.png" 
+                                  alt="CG Logo" 
+                                  className="h-4 w-4 animate-spin"
+                                  style={{ animationDuration: '0.5s' }}
+                                />
+                              ) : (
+                                <div className="flex items-center">
+                                  <span>→</span>
+                                </div>
+                              )}
+                              {log}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </>
+                  )}
+
+                  {activeTab === "analytics" && (
+                    <div className="mt-4">
+                      <RepoAnalyticsDashboard />
                     </div>
-                  </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -401,4 +454,3 @@ const ApiErrorAlert: React.FC<ApiErrorAlertProps> = ({ error }) => {
         </div>
     );
 };
-

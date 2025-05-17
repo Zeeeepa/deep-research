@@ -7,12 +7,17 @@ from langchain_core.messages import SystemMessage
 from fastapi.middleware.cors import CORSMiddleware
 from codegen.extensions.index.file_index import FileIndex
 import os
-from typing import List, Optional
+from typing import List, Optional, Dict, Any, Tuple
 from fastapi.responses import StreamingResponse
 import json
 import logging
 import re
 import importlib
+import math
+import requests
+from datetime import datetime, timedelta
+import subprocess
+import tempfile
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -49,6 +54,9 @@ image = (
         "langchain",
         "langchain-core",
         "pydantic",
+        "requests",
+        "gitpython",
+        "datetime",
     )
 )
 
@@ -109,6 +117,9 @@ class FilesResponse(BaseModel):
 class StatusResponse(BaseModel):
     status: str
 
+class RepoRequest(BaseModel):
+    repo_url: str
+
 
 # Function to get available tools from codegen
 def get_available_tools(codebase):
@@ -161,6 +172,209 @@ def get_available_tools(codebase):
         logger.info("Added RevealSymbolTool to available tools")
     
     return tools
+
+
+# Analytics functions
+def get_monthly_commits(repo_path: str) -> Dict[str, int]:
+    """
+    Get the number of commits per month for the last 12 months.
+
+    Args:
+        repo_path: Path to the git repository
+
+    Returns:
+        Dictionary with month-year as key and number of commits as value
+    """
+    end_date = datetime.now()
+    start_date = end_date - timedelta(days=365)
+
+    date_format = "%Y-%m-%d"
+    since_date = start_date.strftime(date_format)
+    until_date = end_date.strftime(date_format)
+    repo_path = "https://github.com/" + repo_path
+
+    try:
+        original_dir = os.getcwd()
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            subprocess.run(["git", "clone", repo_path, temp_dir], check=True)
+            os.chdir(temp_dir)
+
+            cmd = [
+                "git",
+                "log",
+                f"--since={since_date}",
+                f"--until={until_date}",
+                "--format=%aI",
+            ]
+
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+            commit_dates = result.stdout.strip().split("\n")
+
+            monthly_counts = {}
+            current_date = start_date
+            while current_date <= end_date:
+                month_key = current_date.strftime("%Y-%m")
+                monthly_counts[month_key] = 0
+                current_date = (
+                    current_date.replace(day=1) + timedelta(days=32)
+                ).replace(day=1)
+
+            for date_str in commit_dates:
+                if date_str:  # Skip empty lines
+                    commit_date = datetime.fromisoformat(date_str.strip())
+                    month_key = commit_date.strftime("%Y-%m")
+                    if month_key in monthly_counts:
+                        monthly_counts[month_key] += 1
+
+            os.chdir(original_dir)
+            return dict(sorted(monthly_counts.items()))
+
+    except subprocess.CalledProcessError as e:
+        print(f"Error executing git command: {e}")
+        return {}
+    except Exception as e:
+        print(f"Error processing git commits: {e}")
+        return {}
+    finally:
+        try:
+            os.chdir(original_dir)
+        except:
+            pass
+
+def count_lines(source: str):
+    """Count different types of lines in source code."""
+    if not source.strip():
+        return 0, 0, 0, 0
+
+    lines = [line.strip() for line in source.splitlines()]
+    loc = len(lines)
+    sloc = len([line for line in lines if line])
+
+    in_multiline = False
+    comments = 0
+    code_lines = []
+
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        code_part = line
+        if not in_multiline and "#" in line:
+            comment_start = line.find("#")
+            if not re.search(r'["\'].*#.*["\']', line[:comment_start]):
+                code_part = line[:comment_start].strip()
+                if line[comment_start:].strip():
+                    comments += 1
+
+        if ('"""' in line or "'''" in line) and not (
+            line.count('"""') % 2 == 0 or line.count("'''") % 2 == 0
+        ):
+            if in_multiline:
+                in_multiline = False
+                comments += 1
+            else:
+                in_multiline = True
+                comments += 1
+                if line.strip().startswith('"""') or line.strip().startswith("'''"):
+                    code_part = ""
+        elif in_multiline:
+            comments += 1
+            code_part = ""
+        elif line.strip().startswith("#"):
+            comments += 1
+            code_part = ""
+
+        if code_part.strip():
+            code_lines.append(code_part)
+
+        i += 1
+
+    lloc = 0
+    continued_line = False
+    for line in code_lines:
+        if continued_line:
+            if not any(line.rstrip().endswith(c) for c in ("\\", ",", "{", "[", "(")):
+                continued_line = False
+            continue
+
+        lloc += len([stmt for stmt in line.split(";") if stmt.strip()])
+
+        if any(line.rstrip().endswith(c) for c in ("\\", ",", "{", "[", "(")):
+            continued_line = True
+
+    return loc, lloc, sloc, comments
+
+def calculate_cyclomatic_complexity(function):
+    """Calculate cyclomatic complexity for a function."""
+    # Simplified implementation
+    complexity = 1  # Base complexity
+    
+    if hasattr(function, "code_block") and function.code_block:
+        source = function.code_block.source
+        # Count decision points
+        complexity += source.count(" if ") + source.count(" else ") + source.count(" elif ")
+        complexity += source.count(" for ") + source.count(" while ")
+        complexity += source.count(" and ") + source.count(" or ")
+        complexity += source.count(" try ") + source.count(" except ")
+    
+    return complexity
+
+def calculate_halstead_volume(function):
+    """Calculate Halstead volume for a function."""
+    if not hasattr(function, "code_block") or not function.code_block:
+        return 0
+    
+    source = function.code_block.source
+    
+    # Simple approximation of operators and operands
+    operators = re.findall(r'[\+\-\*/=<>!&|%]|if|else|for|while|return|break|continue', source)
+    operands = re.findall(r'\b[a-zA-Z_][a-zA-Z0-9_]*\b', source)
+    
+    n1 = len(set(operators))  # Unique operators
+    n2 = len(set(operands))   # Unique operands
+    N1 = len(operators)       # Total operators
+    N2 = len(operands)        # Total operands
+    
+    if n1 > 0 and n2 > 0:
+        volume = (N1 + N2) * math.log2(n1 + n2)
+        return volume
+    return 0
+
+def calculate_maintainability_index(halstead_volume, cyclomatic_complexity, loc):
+    """Calculate the maintainability index."""
+    if loc <= 0:
+        return 100
+
+    try:
+        raw_mi = (
+            171
+            - 5.2 * math.log(max(1, halstead_volume))
+            - 0.23 * cyclomatic_complexity
+            - 16.2 * math.log(max(1, loc))
+        )
+        normalized_mi = max(0, min(100, raw_mi * 100 / 171))
+        return int(normalized_mi)
+    except (ValueError, TypeError):
+        return 0
+
+def calculate_doi(cls):
+    """Calculate the depth of inheritance for a given class."""
+    return len(getattr(cls, "superclasses", []))
+
+def get_github_repo_description(repo_url):
+    """Get repository description from GitHub API."""
+    api_url = f"https://api.github.com/repos/{repo_url}"
+    
+    try:
+        response = requests.get(api_url)
+        
+        if response.status_code == 200:
+            repo_data = response.json()
+            return repo_data.get("description", "No description available")
+    except Exception as e:
+        logger.error(f"Error fetching repo description: {str(e)}")
+    
+    return "No description available"
 
 
 @fastapi_app.post("/research", response_model=ResearchResponse)
@@ -229,6 +443,110 @@ async def get_similar_files(repo_name: str, query: str) -> List[str]:
     file_index.create()
     similar_files = file_index.similarity_search(query, k=6)
     return [file.filepath for file, score in similar_files if score > 0.2]
+
+
+@app.function(
+    image=image,
+    secrets=[modal.Secret.from_name(AGENT_SECRET_NAME)],
+    timeout=MODAL_FUNCTION_TIMEOUT
+)
+async def analyze_repo_metrics(repo_url: str) -> Dict[str, Any]:
+    """Analyze a repository and return comprehensive metrics."""
+    try:
+        codebase = Codebase.from_repo(repo_url)
+
+        num_files = len(codebase.files(extensions="*"))
+        num_functions = len(codebase.functions)
+        num_classes = len(codebase.classes)
+
+        total_loc = total_lloc = total_sloc = total_comments = 0
+        total_complexity = 0
+        total_volume = 0
+        total_mi = 0
+        total_doi = 0
+
+        monthly_commits = get_monthly_commits(repo_url)
+
+        for file in codebase.files:
+            loc, lloc, sloc, comments = count_lines(file.source)
+            total_loc += loc
+            total_lloc += lloc
+            total_sloc += sloc
+            total_comments += comments
+
+        callables = codebase.functions + [m for c in codebase.classes for m in c.methods]
+
+        num_callables = 0
+        for func in callables:
+            if not hasattr(func, "code_block"):
+                continue
+
+            complexity = calculate_cyclomatic_complexity(func)
+            volume = calculate_halstead_volume(func)
+            loc = len(func.code_block.source.splitlines())
+            mi_score = calculate_maintainability_index(volume, complexity, loc)
+
+            total_complexity += complexity
+            total_volume += volume
+            total_mi += mi_score
+            num_callables += 1
+
+        for cls in codebase.classes:
+            doi = calculate_doi(cls)
+            total_doi += doi
+
+        desc = get_github_repo_description(repo_url)
+
+        results = {
+            "repo_url": repo_url,
+            "line_metrics": {
+                "total": {
+                    "loc": total_loc,
+                    "lloc": total_lloc,
+                    "sloc": total_sloc,
+                    "comments": total_comments,
+                    "comment_density": (total_comments / total_loc * 100)
+                    if total_loc > 0
+                    else 0,
+                },
+            },
+            "cyclomatic_complexity": {
+                "average": total_complexity / num_callables if num_callables > 0 else 0,
+            },
+            "depth_of_inheritance": {
+                "average": total_doi / len(codebase.classes) if codebase.classes else 0,
+            },
+            "halstead_metrics": {
+                "total_volume": int(total_volume),
+                "average_volume": int(total_volume / num_callables)
+                if num_callables > 0
+                else 0,
+            },
+            "maintainability_index": {
+                "average": int(total_mi / num_callables) if num_callables > 0 else 0,
+            },
+            "description": desc,
+            "num_files": num_files,
+            "num_functions": num_functions,
+            "num_classes": num_classes,
+            "monthly_commits": monthly_commits,
+        }
+
+        return results
+    except Exception as e:
+        logger.error(f"Error analyzing repo metrics: {str(e)}")
+        raise
+
+
+@fastapi_app.post("/analyze_repo")
+async def analyze_repo(request: RepoRequest) -> Dict[str, Any]:
+    """Analyze a repository and return comprehensive metrics."""
+    try:
+        repo_url = request.repo_url
+        return await analyze_repo_metrics.remote(repo_url)
+    except Exception as e:
+        logger.error(f"Error in analyze_repo endpoint: {str(e)}")
+        return {"error": str(e)}
 
 
 @fastapi_app.post("/research/stream")

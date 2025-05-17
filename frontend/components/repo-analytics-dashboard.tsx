@@ -8,37 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 
-const mockRepoData = {
-  name: "vercel/next.js",
-  description: "The React Framework for the Web",
-  linesOfCode: 154321,
-  cyclomaticComplexity: 15.7,
-  depthOfInheritance: 3.2,
-  halsteadVolume: 987654,
-  maintainabilityIndex: 85,
-  commentDensity: 18.5,
-  sloc: 132456,
-  lloc: 98765,
-  numberOfFiles: 1200,
-  numberOfFunctions: 4500,
-  numberOfClasses: 300,
-}
-
-const mockCommitData = [
-  { month: "October", commits: 130 },
-  { month: "September", commits: 150 },
-  { month: "August", commits: 120 },
-  { month: "July", commits: 110 },
-  { month: "June", commits: 140 },
-  { month: "May", commits: 160 },
-  { month: "April", commits: 170 },
-  { month: "March", commits: 180 },
-  { month: "February", commits: 190 },
-  { month: "January", commits: 200 },
-  { month: "December", commits: 210 },
-  { month: "November", commits: 220 },
-];
-
+// Define interfaces for API responses
 interface RepoAnalyticsResponse {
   repo_url: string;
   line_metrics: {
@@ -80,14 +50,19 @@ interface RepoData {
   numberOfClasses: number;
 }
 
+interface CommitData {
+  month: string;
+  commits: number;
+}
+
 export default function RepoAnalyticsDashboard() {
   const [repoUrl, setRepoUrl] = useState("")
-  const [repoData, setRepoData] = useState(mockRepoData)
+  const [repoData, setRepoData] = useState<RepoData | null>(null)
   const [hoveredCard, setHoveredCard] = useState<string | null>(null)
-  const [commitData, setCommitData] = useState(mockCommitData)
+  const [commitData, setCommitData] = useState<CommitData[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [isLandingPage, setIsLandingPage] = useState(true)
-  const [showAnalytics, setShowAnalytics] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const parseRepoUrl = (input: string): string => {
     if (input.includes('github.com')) {
@@ -101,16 +76,19 @@ export default function RepoAnalyticsDashboard() {
   };
 
   const handleFetchRepo = async () => {
-    console.log("Fetching repo data...");
+    if (!repoUrl) {
+      setError("Please enter a repository URL");
+      return;
+    }
     
     const parsedRepoUrl = parseRepoUrl(repoUrl);
-    console.log(parsedRepoUrl);
+    console.log("Analyzing repository:", parsedRepoUrl);
     
     setIsLoading(true);
     setIsLandingPage(false);
+    setError(null);
     
     try {
-      console.log("Fetching repo data...");
       // Get the Modal API URL from environment variables
       const modalApiUrl = process.env.NEXT_PUBLIC_MODAL_API_URL;
       if (!modalApiUrl) {
@@ -136,35 +114,42 @@ export default function RepoAnalyticsDashboard() {
 
       const data: RepoAnalyticsResponse = await response.json();
       
+      if (data.error) {
+        throw new Error(data.error as string);
+      }
+      
       setRepoData({
         name: parsedRepoUrl,
-        description: data.description,
-        linesOfCode: data.line_metrics.total.loc,
-        cyclomaticComplexity: data.cyclomatic_complexity.average,
-        depthOfInheritance: data.depth_of_inheritance.average,
-        halsteadVolume: data.halstead_metrics.total_volume,
-        maintainabilityIndex: data.maintainability_index.average,
-        commentDensity: data.line_metrics.total.comment_density,
-        sloc: data.line_metrics.total.sloc,
-        lloc: data.line_metrics.total.lloc,
-        numberOfFiles: data.num_files,
-        numberOfFunctions: data.num_functions,
-        numberOfClasses: data.num_classes,
+        description: data.description || "No description available",
+        linesOfCode: data.line_metrics?.total?.loc || 0,
+        cyclomaticComplexity: data.cyclomatic_complexity?.average || 0,
+        depthOfInheritance: data.depth_of_inheritance?.average || 0,
+        halsteadVolume: data.halstead_metrics?.total_volume || 0,
+        maintainabilityIndex: data.maintainability_index?.average || 0,
+        commentDensity: data.line_metrics?.total?.comment_density || 0,
+        sloc: data.line_metrics?.total?.sloc || 0,
+        lloc: data.line_metrics?.total?.lloc || 0,
+        numberOfFiles: data.num_files || 0,
+        numberOfFunctions: data.num_functions || 0,
+        numberOfClasses: data.num_classes || 0,
       });
 
-      const transformedCommitData = Object.entries(data.monthly_commits)
-        .map(([date, commits]) => ({
-          month: new Date(date + "-01").toLocaleString('default', { month: 'long' }),
-          commits,
-        }))
-        .slice(0, 12)
-        .reverse();
+      if (data.monthly_commits && Object.keys(data.monthly_commits).length > 0) {
+        const transformedCommitData = Object.entries(data.monthly_commits)
+          .map(([date, commits]) => ({
+            month: new Date(date + "-01").toLocaleString('default', { month: 'long' }),
+            commits,
+          }))
+          .slice(0, 12)
+          .reverse();
 
-      setCommitData(transformedCommitData);
-      setShowAnalytics(true);
+        setCommitData(transformedCommitData);
+      } else {
+        setCommitData([]);
+      }
     } catch (error) {
       console.error('Error fetching repo data:', error);
-      alert('Error fetching repository data. Please check the URL and try again.');
+      setError(error instanceof Error ? error.message : 'Failed to fetch repository data');
       setIsLandingPage(true);
     } finally {
       setIsLoading(false);
@@ -185,22 +170,22 @@ export default function RepoAnalyticsDashboard() {
     }
   }
 
-function calculateCodebaseGrade(data: RepoData) {
-  const { maintainabilityIndex } = data;
-  
-  if (maintainabilityIndex >= 90) return 'A+';
-  if (maintainabilityIndex >= 85) return 'A';
-  if (maintainabilityIndex >= 80) return 'A-';
-  if (maintainabilityIndex >= 75) return 'B+';
-  if (maintainabilityIndex >= 70) return 'B';
-  if (maintainabilityIndex >= 65) return 'B-';
-  if (maintainabilityIndex >= 60) return 'C+';
-  if (maintainabilityIndex >= 55) return 'C';
-  if (maintainabilityIndex >= 50) return 'C-';
-  if (maintainabilityIndex >= 45) return 'D+';
-  if (maintainabilityIndex >= 40) return 'D';
-  return 'F';
-}
+  function calculateCodebaseGrade(data: RepoData) {
+    const { maintainabilityIndex } = data;
+    
+    if (maintainabilityIndex >= 90) return 'A+';
+    if (maintainabilityIndex >= 85) return 'A';
+    if (maintainabilityIndex >= 80) return 'A-';
+    if (maintainabilityIndex >= 75) return 'B+';
+    if (maintainabilityIndex >= 70) return 'B';
+    if (maintainabilityIndex >= 65) return 'B-';
+    if (maintainabilityIndex >= 60) return 'C+';
+    if (maintainabilityIndex >= 55) return 'C';
+    if (maintainabilityIndex >= 50) return 'C-';
+    if (maintainabilityIndex >= 45) return 'D+';
+    if (maintainabilityIndex >= 40) return 'D';
+    return 'F';
+  }
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -230,6 +215,11 @@ function calculateCodebaseGrade(data: RepoData) {
               {isLoading ? "Loading..." : "Analyze"}
             </Button>
           </div>
+          {error && (
+            <div className="mt-4 p-3 bg-red-100 text-red-800 rounded-md">
+              {error}
+            </div>
+          )}
           <footer className="absolute bottom-0 w-full text-center text-xs text-muted-foreground py-4">
             built with <a href="https://codegen.com" target="_blank" rel="noopener noreferrer" className="hover:text-primary">Codegen</a>
           </footer>
@@ -242,7 +232,7 @@ function calculateCodebaseGrade(data: RepoData) {
           </div>
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
         </div>
-      ) : (
+      ) : repoData ? (
         <div className="flex flex-col min-h-screen">
           <header className="sticky top-0 z-10 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
             <div className="w-full px-8 py-4">
@@ -250,7 +240,7 @@ function calculateCodebaseGrade(data: RepoData) {
                 <div className="flex-shrink-0">
                   <h1
                     className="text-2xl font-bold flex items-center space-x-3 cursor-pointer"
-                    onClick={() => window.location.reload()}
+                    onClick={() => setIsLandingPage(true)}
                   >
                     <img src="cg.png" alt="CG Logo" className="h-8 w-8" />
                     <span>Codebase Analytics</span>
@@ -309,7 +299,7 @@ function calculateCodebaseGrade(data: RepoData) {
                   <Settings className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">{repoData.maintainabilityIndex}</div>
+                  <div className="text-2xl font-bold">{repoData.maintainabilityIndex.toFixed(1)}</div>
                   <p className="text-xs text-muted-foreground mt-1">
                     {hoveredCard === 'Maintainability Index' ? 'This evaluates how easy it is to understand, modify, and maintain a codebase (ranging from 0 to 100).' : 'Code maintainability score (0-100)'}
                   </p>
@@ -400,21 +390,23 @@ function calculateCodebaseGrade(data: RepoData) {
                 </CardContent>
               </Card>
             </div>
-            <Card className="mt-6">
-              <CardHeader>
-                <CardTitle>Monthly Commits</CardTitle>
-                <CardDescription>Number of commits, batched by month over the past year</CardDescription>
-              </CardHeader>
-              <CardContent className="pt-4">
-                <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={commitData}>
-                    <XAxis dataKey="month" stroke="#888888" />
-                    <YAxis stroke="#888888" />
-                    <Bar dataKey="commits" fill="#2563eb" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
+            {commitData.length > 0 && (
+              <Card className="mt-6">
+                <CardHeader>
+                  <CardTitle>Monthly Commits</CardTitle>
+                  <CardDescription>Number of commits, batched by month over the past year</CardDescription>
+                </CardHeader>
+                <CardContent className="pt-4">
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={commitData}>
+                      <XAxis dataKey="month" stroke="#888888" />
+                      <YAxis stroke="#888888" />
+                      <Bar dataKey="commits" fill="#2563eb" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+            )}
             <div className="grid gap-6 md:grid-cols-2">
               <Card className="mt-6">
                 <CardContent className="pt-5 flex justify-between items-center">
@@ -434,18 +426,32 @@ function calculateCodebaseGrade(data: RepoData) {
                     <CardDescription>Judgment based on size and complexity</CardDescription>
                   </div>
                   <div className="text-2xl font-bold text-right">
-                  {repoData.numberOfFiles > 1000 ? "Large" : "Moderate"}
+                    {repoData.numberOfFiles > 1000 ? "Large" : 
+                     repoData.numberOfFiles > 500 ? "Moderate" : 
+                     repoData.numberOfFiles > 100 ? "Small" : "Tiny"}
                   </div>
                 </CardContent>
               </Card>
             </div>
           </main>
           <footer className="w-full text-center text-xs text-muted-foreground py-4">
-          built with <a href="https://codegen.com" target="_blank" rel="noopener noreferrer" className="hover:text-primary">Codegen</a>
+            built with <a href="https://codegen.com" target="_blank" rel="noopener noreferrer" className="hover:text-primary">Codegen</a>
           </footer>
+        </div>
+      ) : (
+        <div className="flex flex-col items-center justify-center min-h-screen">
+          <div className="text-center mb-8">
+            <h2 className="text-2xl font-bold mb-4">No Data Available</h2>
+            <p className="text-muted-foreground">Please enter a repository URL to analyze</p>
+            <Button 
+              onClick={() => setIsLandingPage(true)} 
+              className="mt-4"
+            >
+              Return to Search
+            </Button>
+          </div>
         </div>
       )}
     </div>
   )
 }
-

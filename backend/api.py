@@ -3,13 +3,6 @@ from pydantic import BaseModel
 import modal
 from codegen import Codebase
 from codegen.extensions.langchain.agent import create_agent_with_tools
-from codegen.extensions.langchain.tools import (
-    ListDirectoryTool,
-    RevealSymbolTool,
-    RipGrepTool,
-    SemanticSearchTool,
-    ViewFileTool,
-)
 from langchain_core.messages import SystemMessage
 from fastapi.middleware.cors import CORSMiddleware
 from codegen.extensions.index.file_index import FileIndex
@@ -19,6 +12,7 @@ from fastapi.responses import StreamingResponse
 import json
 import logging
 import re
+import importlib
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -49,6 +43,7 @@ image = (
     modal.Image.debian_slim()
     .apt_install("git")
     .pip_install(
+        "modal==0.52.19",
         "codegen==0.30.0",
         "fastapi",
         "uvicorn",
@@ -116,6 +111,59 @@ class StatusResponse(BaseModel):
     status: str
 
 
+# Function to get available tools from codegen
+def get_available_tools(codebase):
+    """
+    Get available tools from codegen based on what's available in the current environment.
+    This function handles different versions of the codegen library.
+    """
+    tools = []
+    
+    # Import tools module
+    tools_module = importlib.import_module("codegen.extensions.langchain.tools")
+    
+    # Check for ViewFileTool
+    if hasattr(tools_module, "ViewFileTool"):
+        tools.append(tools_module.ViewFileTool(codebase))
+        logger.info("Added ViewFileTool to available tools")
+    
+    # Check for ListDirectoryTool
+    if hasattr(tools_module, "ListDirectoryTool"):
+        tools.append(tools_module.ListDirectoryTool(codebase))
+        logger.info("Added ListDirectoryTool to available tools")
+    
+    # Check for search tools - try different names based on codegen version
+    search_tool_added = False
+    
+    # Try RipGrepTool (newer versions)
+    if hasattr(tools_module, "RipGrepTool"):
+        tools.append(tools_module.RipGrepTool(codebase))
+        logger.info("Added RipGrepTool to available tools")
+        search_tool_added = True
+    
+    # Try SearchTool (older versions)
+    elif hasattr(tools_module, "SearchTool"):
+        tools.append(tools_module.SearchTool(codebase))
+        logger.info("Added SearchTool to available tools")
+        search_tool_added = True
+    
+    # If no search tool is available, log a warning
+    if not search_tool_added:
+        logger.warning("No search tool available in codegen library")
+    
+    # Check for SemanticSearchTool
+    if hasattr(tools_module, "SemanticSearchTool"):
+        tools.append(tools_module.SemanticSearchTool(codebase))
+        logger.info("Added SemanticSearchTool to available tools")
+    
+    # Check for RevealSymbolTool
+    if hasattr(tools_module, "RevealSymbolTool"):
+        tools.append(tools_module.RevealSymbolTool(codebase))
+        logger.info("Added RevealSymbolTool to available tools")
+    
+    return tools
+
+
 @fastapi_app.post("/research", response_model=ResearchResponse)
 async def research(request: ResearchRequest) -> ResearchResponse:
     """
@@ -126,13 +174,7 @@ async def research(request: ResearchRequest) -> ResearchResponse:
         codebase = Codebase.from_repo(request.repo_name)
 
         update_status("Creating research tools...")
-        tools = [
-            ViewFileTool(codebase),
-            ListDirectoryTool(codebase),
-            RipGrepTool(codebase),
-            SemanticSearchTool(codebase),
-            RevealSymbolTool(codebase),
-        ]
+        tools = get_available_tools(codebase)
 
         update_status("Initializing research agent...")
         agent = create_agent_with_tools(
@@ -231,13 +273,7 @@ async def research_stream(request: ResearchRequest):
                 return
 
             # Create tools
-            tools = [
-                ViewFileTool(codebase),
-                ListDirectoryTool(codebase),
-                RipGrepTool(codebase),
-                SemanticSearchTool(codebase),
-                RevealSymbolTool(codebase),
-            ]
+            tools = get_available_tools(codebase)
             logger.info("Research tools created successfully")
 
             # Initialize agent
@@ -398,4 +434,3 @@ if __name__ == "__main__":
         logger.error(f"Failed to deploy Modal app: {str(e)}", exc_info=True)
         print(f"Error deploying Modal app: {str(e)}")
         exit(1)
-

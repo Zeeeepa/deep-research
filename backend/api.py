@@ -602,10 +602,16 @@ async def health_check():
 @fastapi_app.get("/")
 async def root():
     """Root endpoint that provides API information."""
+    build_timestamp = os.environ.get("FORCE_REBUILD", "not_set")
+    current_time = datetime.now().isoformat()
+    
     return {
         "name": "Deep Research API",
         "version": "1.0.0",
         "description": "API for researching and analyzing codebases using AI",
+        "status": "online",
+        "build_timestamp": build_timestamp,
+        "current_timestamp": current_time,
         "endpoints": {
             "/": "This information",
             "/health": "Health check endpoint",
@@ -614,7 +620,23 @@ async def root():
             "/analyze-repo": "Repository analytics endpoint (POST)",
             "/research/analyze_repo": "Repository analytics endpoint (POST, alias)"
         },
-        "timestamp": datetime.now().isoformat()
+        "documentation": {
+            "description": "API for analyzing and researching codebases",
+            "usage": {
+                "analyze_repo": {
+                    "endpoint": "/analyze-repo",
+                    "method": "POST",
+                    "body": {"repo_url": "owner/repo"},
+                    "example": "curl -X POST -H 'Content-Type: application/json' -d '{\"repo_url\":\"facebook/react\"}' https://your-api-url/analyze-repo"
+                },
+                "research": {
+                    "endpoint": "/research/stream",
+                    "method": "POST",
+                    "body": {"repo_name": "owner/repo", "query": "How does the state management work?"},
+                    "example": "curl -X POST -H 'Content-Type: application/json' -d '{\"repo_name\":\"facebook/react\",\"query\":\"How does the state management work?\"}' https://your-api-url/research/stream"
+                }
+            }
+        }
     }
 
 @fastapi_app.post("/research", response_model=ResearchResponse)
@@ -756,7 +778,20 @@ async def analyze_repo_metrics(repo_url: str) -> Dict[str, Any]:
         }
     except Exception as e:
         logger.error(f"Error in analyze_repo_metrics: {str(e)}", exc_info=True)
-        raise
+        # Return error information instead of letting the exception propagate
+        return {
+            "error": f"Failed to analyze repository: {str(e)}",
+            "description": "Error occurred during repository analysis",
+            "line_metrics": {"total": {"loc": 0, "lloc": 0, "sloc": 0, "comments": 0, "comment_density": 0}},
+            "cyclomatic_complexity": {"average": 0},
+            "halstead_metrics": {"total_volume": 0, "average_volume": 0},
+            "maintainability_index": {"average": 0},
+            "depth_of_inheritance": {"average": 0},
+            "monthly_commits": {},
+            "num_files": 0,
+            "num_functions": 0,
+            "num_classes": 0
+        }
 
 
 @fastapi_app.post("/research/analyze_repo", response_model=RepoAnalyticsResponse)
@@ -774,9 +809,26 @@ async def analyze_repo_endpoint(request: RepoAnalyticsRequest) -> RepoAnalyticsR
         repo_url = request.repo_url
         logger.info(f"Analyzing repository: {repo_url}")
         
+        # Clean the repository URL to handle common issues
+        repo_url = repo_url.strip().replace("https:", "")
+        if repo_url.endswith(".git"):
+            repo_url = repo_url[:-4]
+        
+        # Log the cleaned URL
+        logger.info(f"Cleaned repository URL: {repo_url}")
+        
         # Get repository metrics
         metrics = await analyze_repo_metrics(repo_url)
         
+        # Check if there was an error
+        if "error" in metrics:
+            logger.warning(f"Error in repository analysis: {metrics['error']}")
+            return RepoAnalyticsResponse(
+                repo_url=repo_url,
+                **metrics
+            )
+        
+        logger.info(f"Successfully analyzed repository: {repo_url}")
         return RepoAnalyticsResponse(
             repo_url=repo_url,
             **metrics

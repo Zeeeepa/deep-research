@@ -5,7 +5,6 @@ import { Github, ArrowRight, FileText, BarChart3, ChevronRight } from "lucide-re
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import ReactMarkdown from 'react-markdown'
 import RepoAnalyticsDashboard from "./repo-analytics-dashboard"
 
@@ -41,7 +40,6 @@ export default function RepoChatDashboard() {
   const [logs, setLogs] = useState<string[]>([])
   const [similarFiles, setSimilarFiles] = useState<string[]>([])
   const [apiError, setApiError] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState("research")
   const [repoDataRetrieved, setRepoDataRetrieved] = useState(false)
 
   const parseRepoUrl = (input: string): string => {
@@ -66,7 +64,6 @@ export default function RepoChatDashboard() {
     }
     
     setIsLoading(true);
-    setIsLandingPage(false);
     setResearchResult("");
     setLogs([]);
     setSimilarFiles([]);
@@ -243,14 +240,6 @@ export default function RepoChatDashboard() {
                 </span>
               </Button>
             </div>
-            <div className="flex justify-center">
-              <Tabs defaultValue="research" className="w-full mt-5" onValueChange={setActiveTab}>
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="research">Research</TabsTrigger>
-                  <TabsTrigger value="analytics">Analytics</TabsTrigger>
-                </TabsList>
-              </Tabs>
-            </div>
           </div>
         </div>
       </div>
@@ -269,23 +258,15 @@ export default function RepoChatDashboard() {
               <img src="cg.png" alt="CG Logo" className="h-8 w-8" />
               <h2 className="text-3xl font-bold tracking-tight">Deep Research</h2>
             </div>
-            <div className="flex items-center gap-4">
-              <Tabs value={activeTab} className="w-[400px]" onValueChange={setActiveTab}>
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="research">Research</TabsTrigger>
-                  <TabsTrigger value="analytics">Analytics</TabsTrigger>
-                </TabsList>
-              </Tabs>
-              <Button onClick={() => setIsLandingPage(true)}>
-                <span className="font-semibold">New Search</span>
-              </Button>
-            </div>
+            <Button onClick={() => setIsLandingPage(true)}>
+              <span className="font-semibold">New Search</span>
+            </Button>
           </div>
           <br></br>
           <div className="min-h-[calc(100vh-12rem)] animate-in fade-in slide-in-from-bottom-4 duration-500 fill-mode-forwards [animation-delay:600ms]">
             <Card className="h-full border-0">
               <CardHeader>
-                <CardTitle className="text-2xl">{question || "Repository Analysis"}</CardTitle>
+                <CardTitle className="text-2xl">Repository Analysis</CardTitle>
                 <div className="flex items-center gap-2 text-md text-muted-foreground">
                   <Github className="h-4 w-4" />
                   <a 
@@ -300,28 +281,33 @@ export default function RepoChatDashboard() {
               </CardHeader>
               <CardContent>
                 <div className="space-y-6">
-                  {activeTab === "research" && (
-                    <>
-                      {repoDataRetrieved && (
-                        <div className="flex gap-2 mb-4">
-                          <Input
-                            type="text"
-                            placeholder="Ask Deep Research anything about the codebase"
-                            value={question}
-                            onChange={(e) => setQuestion(e.target.value)}
-                            onKeyPress={handleKeyPress}
-                            className="flex-1"
-                          />
-                          <Button 
-                            onClick={handleSubmit} 
-                            disabled={isLoading || !repoUrl || !question}
-                          >
-                            <span className="font-semibold flex items-center gap-2">
-                              {isLoading ? "Loading..." : <>Explore <ChevronRight className="h-4 w-4" /></>}
-                            </span>
-                          </Button>
-                        </div>
-                      )}
+                  {/* Analytics Dashboard */}
+                  <div className="mt-4">
+                    <RepoAnalyticsDashboard />
+                  </div>
+                  
+                  {/* Q&A Section below Analytics */}
+                  {repoDataRetrieved && (
+                    <div className="mt-8 pt-8 border-t border-gray-800">
+                      <h3 className="text-xl font-semibold mb-4">Ask Questions About This Codebase</h3>
+                      <div className="flex gap-2 mb-4">
+                        <Input
+                          type="text"
+                          placeholder="Ask Deep Research anything about the codebase"
+                          value={question}
+                          onChange={(e) => setQuestion(e.target.value)}
+                          onKeyPress={handleKeyPress}
+                          className="flex-1"
+                        />
+                        <Button 
+                          onClick={handleSubmit} 
+                          disabled={isLoading || !repoUrl || !question}
+                        >
+                          <span className="font-semibold flex items-center gap-2">
+                            {isLoading ? "Loading..." : <>Explore <ChevronRight className="h-4 w-4" /></>}
+                          </span>
+                        </Button>
+                      </div>
 
                       {researchResult && (
                         <div className="space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-500">
@@ -371,18 +357,7 @@ export default function RepoChatDashboard() {
                                   </Card>
                                 );
                               })
-                            ) : (
-                              Array(6).fill(0).map((_, i) => (
-                                <Card 
-                                  key={i}
-                                  className="p-4 flex flex-col justify-between bg-muted/25 border-none hover:bg-muted transition-colors cursor-pointer rounded-xl"
-                                >
-                                  <div className="flex items-center gap-2">
-                                    <p className="text-sm font-medium text-muted-foreground">Example file {i + 1}</p>
-                                  </div>
-                                </Card>
-                              ))
-                            )}
+                            ) : null}
                           </div>
                         </div>
                       )}
@@ -415,20 +390,6 @@ export default function RepoChatDashboard() {
                           </div>
                         </div>
                       )}
-
-                      {!repoDataRetrieved && !researchResult && !isLoading && (
-                        <div className="flex flex-col items-center justify-center py-12">
-                          <p className="text-muted-foreground text-center mb-4">
-                            Enter a repository URL to start exploring the codebase
-                          </p>
-                        </div>
-                      )}
-                    </>
-                  )}
-
-                  {activeTab === "analytics" && (
-                    <div className="mt-4">
-                      <RepoAnalyticsDashboard />
                     </div>
                   )}
                 </div>

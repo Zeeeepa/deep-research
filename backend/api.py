@@ -591,52 +591,34 @@ def calculate_line_metrics(codebase):
 
 
 @fastapi_app.get("/health")
-async def health_check():
-    """Health check endpoint."""
+async def health():
+    """
+    Health check endpoint
+    """
+    build_timestamp = os.environ.get("BUILD_TIMESTAMP", "unknown")
     return {
-        "status": "ok",
+        "status": "healthy",
         "timestamp": datetime.now().isoformat(),
-        "build_timestamp": os.environ.get("FORCE_REBUILD", "not_set")
+        "build_timestamp": build_timestamp
     }
 
 @fastapi_app.get("/")
 async def root():
-    """Root endpoint that provides API information."""
-    build_timestamp = os.environ.get("FORCE_REBUILD", "not_set")
-    current_time = datetime.now().isoformat()
-    
+    """
+    Root endpoint that provides API information and documentation
+    """
     return {
         "name": "Deep Research API",
         "version": "1.0.0",
-        "description": "API for researching and analyzing codebases using AI",
-        "status": "online",
-        "build_timestamp": build_timestamp,
-        "current_timestamp": current_time,
+        "description": "API for analyzing repositories and answering questions about codebases",
         "endpoints": {
-            "/": "This information",
+            "/": "This documentation",
             "/health": "Health check endpoint",
-            "/research": "Research endpoint (POST)",
+            "/research": "Research endpoint for analyzing repositories (POST)",
             "/research/stream": "Streaming research endpoint (POST)",
-            "/analyze-repo": "Repository analytics endpoint (POST)",
-            "/research/analyze_repo": "Repository analytics endpoint (POST, alias)"
+            "/analyze-repo": "Repository analytics endpoint (POST)"
         },
-        "documentation": {
-            "description": "API for analyzing and researching codebases",
-            "usage": {
-                "analyze_repo": {
-                    "endpoint": "/analyze-repo",
-                    "method": "POST",
-                    "body": {"repo_url": "owner/repo"},
-                    "example": "curl -X POST -H 'Content-Type: application/json' -d '{\"repo_url\":\"facebook/react\"}' https://your-api-url/analyze-repo"
-                },
-                "research": {
-                    "endpoint": "/research/stream",
-                    "method": "POST",
-                    "body": {"repo_name": "owner/repo", "query": "How does the state management work?"},
-                    "example": "curl -X POST -H 'Content-Type: application/json' -d '{\"repo_name\":\"facebook/react\",\"query\":\"How does the state management work?\"}' https://your-api-url/research/stream"
-                }
-            }
-        }
+        "status": "online"
     }
 
 @fastapi_app.post("/research", response_model=ResearchResponse)
@@ -699,12 +681,39 @@ async def similar_files(request: ResearchRequest) -> FilesResponse:
 async def get_similar_files(repo_name: str, query: str) -> List[str]:
     """
     Separate Modal function to find similar files
+    
+    Args:
+        repo_name: The repository name in owner/repo format
+        query: The search query
+        
+    Returns:
+        List of similar files
+        
+    Raises:
+        Exception: If there's an error finding similar files
     """
-    codebase = Codebase.from_repo(repo_name)
-    file_index = FileIndex(codebase)
-    file_index.create()
-    similar_files = file_index.similarity_search(query, k=6)
-    return [file.filepath for file, score in similar_files if score > 0.2]
+    try:
+        logger.info(f"Finding similar files for {repo_name} with query: {query}")
+        codebase = Codebase.from_repo(repo_name)
+        file_index = FileIndex(codebase)
+        
+        try:
+            file_index.create()
+            similar_files = file_index.similarity_search(query, k=6)
+            return [file.filepath for file, score in similar_files if score > 0.2]
+        except Exception as e:
+            # Check for OpenAI API rate limit errors
+            error_str = str(e)
+            if "RateLimitError" in error_str or "429" in error_str or "quota" in error_str:
+                logger.error(f"OpenAI API rate limit exceeded: {error_str}")
+                # Return a special error message that the frontend can handle
+                raise Exception("OPENAI_RATE_LIMIT: OpenAI API rate limit exceeded. Similar files search is unavailable.")
+            else:
+                logger.error(f"Error creating file index: {error_str}")
+                raise
+    except Exception as e:
+        logger.error(f"Error in get_similar_files: {str(e)}", exc_info=True)
+        raise
 
 
 @app.function(
@@ -877,7 +886,7 @@ async def research_stream(request: ResearchRequest):
                 logger.info(f"Initiated similar files search for {request.repo_name}")
             except Exception as e:
                 logger.error(f"Error initiating similar files search: {str(e)}")
-                yield f"data: {json.dumps({'type': 'error', 'content': f'Failed to start similar files search: {str(e)}'})}\n\n"
+                yield f"data: {json.dumps({'type': 'error', 'content': f'Failed to start similar files search: {str(e)}'})}\\n\\n"
                 similar_files_future = None
 
             # Initialize codebase
@@ -886,7 +895,7 @@ async def research_stream(request: ResearchRequest):
                 logger.info(f"Successfully initialized codebase from {request.repo_name}")
             except Exception as e:
                 logger.error(f"Error initializing codebase: {str(e)}")
-                yield f"data: {json.dumps({'type': 'error', 'content': f'Failed to initialize codebase: {str(e)}'})}\n\n"
+                yield f"data: {json.dumps({'type': 'error', 'content': f'Failed to initialize codebase: {str(e)}'})}\\n\\n"
                 return
 
             # Create tools
@@ -904,7 +913,7 @@ async def research_stream(request: ResearchRequest):
                 logger.info("Research agent initialized successfully")
             except Exception as e:
                 logger.error(f"Error initializing agent: {str(e)}")
-                yield f"data: {json.dumps({'type': 'error', 'content': f'Failed to initialize research agent: {str(e)}'})}\n\n"
+                yield f"data: {json.dumps({'type': 'error', 'content': f'Failed to initialize research agent: {str(e)}'})}\\n\\n"
                 return
 
             # Start research task
@@ -917,7 +926,7 @@ async def research_stream(request: ResearchRequest):
                 logger.info("Research task started successfully")
             except Exception as e:
                 logger.error(f"Error starting research task: {str(e)}")
-                yield f"data: {json.dumps({'type': 'error', 'content': f'Failed to start research task: {str(e)}'})}\n\n"
+                yield f"data: {json.dumps({'type': 'error', 'content': f'Failed to start research task: {str(e)}'})}\\n\\n"
                 return
 
             # Get similar files results if available
@@ -925,10 +934,10 @@ async def research_stream(request: ResearchRequest):
                 try:
                     similar_files = await similar_files_future
                     logger.info(f"Found {len(similar_files)} similar files")
-                    yield f"data: {json.dumps({'type': 'similar_files', 'content': similar_files})}\n\n"
+                    yield f"data: {json.dumps({'type': 'similar_files', 'content': similar_files})}\\n\\n"
                 except Exception as e:
                     logger.error(f"Error getting similar files: {str(e)}")
-                    yield f"data: {json.dumps({'type': 'error', 'content': f'Failed to get similar files: {str(e)}'})}\n\n"
+                    yield f"data: {json.dumps({'type': 'error', 'content': f'Failed to get similar files: {str(e)}'})}\\n\\n"
 
             # Stream research results
             try:
@@ -938,16 +947,16 @@ async def research_stream(request: ResearchRequest):
                         content = event["data"]["chunk"].content
                         if content:
                             final_response += content
-                            yield f"data: {json.dumps({'type': 'content', 'content': content})}\n\n"
+                            yield f"data: {json.dumps({'type': 'content', 'content': content})}\\n\\n"
                     elif kind in ["on_tool_start", "on_tool_end"]:
-                        yield f"data: {json.dumps({'type': kind, 'data': event['data']})}\n\n"
+                        yield f"data: {json.dumps({'type': kind, 'data': event['data']})}\\n\\n"
             except Exception as e:
                 logger.error(f"Error during research streaming: {str(e)}")
-                yield f"data: {json.dumps({'type': 'error', 'content': f'Error during research: {str(e)}'})}\n\n"
+                yield f"data: {json.dumps({'type': 'error', 'content': f'Error during research: {str(e)}'})}\\n\\n"
 
             # Send completion event
             logger.info("Research completed successfully")
-            yield f"data: {json.dumps({'type': 'complete', 'content': final_response})}\n\n"
+            yield f"data: {json.dumps({'type': 'complete', 'content': final_response})}\\n\\n"
 
         return StreamingResponse(
             event_generator(),
@@ -960,8 +969,8 @@ async def research_stream(request: ResearchRequest):
         error_status = update_status("Validation error")
         return StreamingResponse(
             iter([
-                f"data: {json.dumps(error_status)}\n\n",
-                f"data: {json.dumps({'type': 'error', 'content': f'Invalid input: {str(e)}'})}\n\n",
+                f"data: {json.dumps(error_status)}\\n\\n",
+                f"data: {json.dumps({'type': 'error', 'content': f'Invalid input: {str(e)}'})}\\n\\n",
             ]),
             media_type="text/event-stream",
         )
@@ -973,8 +982,8 @@ async def research_stream(request: ResearchRequest):
             error_status = update_status("Repository error")
             return StreamingResponse(
                 iter([
-                    f"data: {json.dumps(error_status)}\n\n",
-                    f"data: {json.dumps({'type': 'error', 'content': f'Repository error: {str(e)}'})}\n\n",
+                    f"data: {json.dumps(error_status)}\\n\\n",
+                    f"data: {json.dumps({'type': 'error', 'content': f'Repository error: {str(e)}'})}\\n\\n",
                 ]),
                 media_type="text/event-stream",
             )
@@ -984,8 +993,8 @@ async def research_stream(request: ResearchRequest):
         error_status = update_status("Error occurred")
         return StreamingResponse(
             iter([
-                f"data: {json.dumps(error_status)}\n\n",
-                f"data: {json.dumps({'type': 'error', 'content': str(e)})}\n\n",
+                f"data: {json.dumps(error_status)}\\n\\n",
+                f"data: {json.dumps({'type': 'error', 'content': str(e)})}\\n\\n",
             ]),
             media_type="text/event-stream",
         )

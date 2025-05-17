@@ -43,30 +43,50 @@ export default function RepoChatDashboard() {
   const [repoDataRetrieved, setRepoDataRetrieved] = useState(false)
 
   const parseRepoUrl = (input: string): string => {
+    if (!input) return "";
+    
     try {
-      // Handle GitHub URLs
+      // Handle full GitHub URLs
       if (input.includes('github.com')) {
-        const url = new URL(input);
-        const pathParts = url.pathname.split('/').filter(Boolean);
-        if (pathParts.length >= 2) {
-          return `${pathParts[0]}/${pathParts[1]}`;
+        // Remove any trailing slashes, .git, or other problematic suffixes
+        let cleanedInput = input.trim()
+          .replace(/\.git$/, '')
+          .replace(/\/$/, '')
+          .replace(/https:$/, '');
+          
+        // Parse URL properly
+        try {
+          const url = new URL(cleanedInput);
+          const pathParts = url.pathname.split('/').filter(Boolean);
+          if (pathParts.length >= 2) {
+            return `${pathParts[0]}/${pathParts[1]}`;
+          }
+        } catch (e) {
+          console.error('Error parsing URL:', e);
+          // Fall through to other parsing methods
         }
       }
       
-      // Handle owner/repo format
+      // Handle owner/repo format (e.g., "Zeeeepa/deep-research")
       if (input.includes('/') && !input.includes('http')) {
         const parts = input.trim().split('/');
-        if (parts.length === 2) {
+        if (parts.length === 2 && parts[0] && parts[1]) {
           return input.trim();
         }
       }
       
       // Return cleaned input for other cases
-      return input.trim().replace(/https:$/, '');
+      return input.trim()
+        .replace(/\.git$/, '')
+        .replace(/\/$/, '')
+        .replace(/https:$/, '');
     } catch (error) {
       console.error('Error parsing repo URL:', error);
       // Return a cleaned version of the input
-      return input.trim().replace(/https:$/, '');
+      return input.trim()
+        .replace(/\.git$/, '')
+        .replace(/\/$/, '')
+        .replace(/https:$/, '');
     }
   }
 
@@ -159,10 +179,19 @@ export default function RepoChatDashboard() {
                   } else if (eventData.type === 'content') {
                     setResearchResult(prev => prev + eventData.content);
                   } else if (eventData.type === 'error') {
-                    setResearchResult(`Error: ${eventData.content}`);
-                    setApiError(eventData.content);
-                    setIsLoading(false);
-                    return;
+                    // Check for OpenAI rate limit errors
+                    if (eventData.content && eventData.content.includes('OPENAI_RATE_LIMIT')) {
+                      // Special handling for OpenAI rate limit errors
+                      setApiError("OpenAI API rate limit exceeded. Some features like similar files search may be unavailable, but you can still ask questions about the repository.");
+                      setLogs(prev => [...prev, "Warning: OpenAI API rate limit exceeded. Similar files search disabled."]);
+                      // Don't stop loading or set research result to error - continue with limited functionality
+                    } else {
+                      // For other errors, show the error and stop loading
+                      setResearchResult(`Error: ${eventData.content}`);
+                      setApiError(eventData.content);
+                      setIsLoading(false);
+                      return;
+                    }
                   } else if (eventData.type === 'complete') {
                     setResearchResult(eventData.content);
                     setIsLoading(false);

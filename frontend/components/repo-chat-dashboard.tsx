@@ -43,14 +43,31 @@ export default function RepoChatDashboard() {
   const [repoDataRetrieved, setRepoDataRetrieved] = useState(false)
 
   const parseRepoUrl = (input: string): string => {
-    if (input.includes('github.com')) {
-      const url = new URL(input)
-      const pathParts = url.pathname.split('/').filter(Boolean)
-      if (pathParts.length >= 2) {
-        return `${pathParts[0]}/${pathParts[1]}`
+    try {
+      // Handle GitHub URLs
+      if (input.includes('github.com')) {
+        const url = new URL(input);
+        const pathParts = url.pathname.split('/').filter(Boolean);
+        if (pathParts.length >= 2) {
+          return `${pathParts[0]}/${pathParts[1]}`;
+        }
       }
+      
+      // Handle owner/repo format
+      if (input.includes('/') && !input.includes('http')) {
+        const parts = input.trim().split('/');
+        if (parts.length === 2) {
+          return input.trim();
+        }
+      }
+      
+      // Return cleaned input for other cases
+      return input.trim().replace(/https:$/, '');
+    } catch (error) {
+      console.error('Error parsing repo URL:', error);
+      // Return a cleaned version of the input
+      return input.trim().replace(/https:$/, '');
     }
-    return input
   }
 
   const handleSubmit = async () => {

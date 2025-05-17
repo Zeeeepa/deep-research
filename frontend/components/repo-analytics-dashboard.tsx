@@ -79,14 +79,31 @@ export default function RepoAnalyticsDashboard({ repoUrl: initialRepoUrl }: Repo
   }, [initialRepoUrl]);
 
   const parseRepoUrl = (input: string): string => {
-    if (input.includes('github.com')) {
-      const url = new URL(input);
-      const pathParts = url.pathname.split('/').filter(Boolean);
-      if (pathParts.length >= 2) {
-        return `${pathParts[0]}/${pathParts[1]}`;
+    try {
+      // Handle GitHub URLs
+      if (input.includes('github.com')) {
+        const url = new URL(input);
+        const pathParts = url.pathname.split('/').filter(Boolean);
+        if (pathParts.length >= 2) {
+          return `${pathParts[0]}/${pathParts[1]}`;
+        }
       }
+      
+      // Handle owner/repo format
+      if (input.includes('/') && !input.includes('http')) {
+        const parts = input.trim().split('/');
+        if (parts.length === 2) {
+          return input.trim();
+        }
+      }
+      
+      // Return cleaned input for other cases
+      return input.trim().replace(/https:$/, '');
+    } catch (error) {
+      console.error('Error parsing repo URL:', error);
+      // Return a cleaned version of the input
+      return input.trim().replace(/https:$/, '');
     }
-    return input;
   };
 
   const handleFetchRepo = async () => {
@@ -125,7 +142,9 @@ export default function RepoAnalyticsDashboard({ repoUrl: initialRepoUrl }: Repo
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorText = await response.text();
+        console.error(`HTTP error! status: ${response.status}, body:`, errorText);
+        throw new Error(`HTTP error! status: ${response.status}. ${errorText || ''}`);
       }
 
       const data: RepoAnalyticsResponse = await response.json();
@@ -168,6 +187,7 @@ export default function RepoAnalyticsDashboard({ repoUrl: initialRepoUrl }: Repo
     } catch (error) {
       console.error('Error fetching repo data:', error);
       setError(error instanceof Error ? error.message : 'Failed to fetch repository data');
+      setRepoData(null);
     } finally {
       setIsLoading(false);
     }
@@ -213,6 +233,16 @@ export default function RepoAnalyticsDashboard({ repoUrl: initialRepoUrl }: Repo
             <p className="text-muted-foreground">Please wait while we calculate codebase metrics with Codegen...</p>
           </div>
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
+        </div>
+      ) : error ? (
+        <div className="flex flex-col items-center justify-center py-12">
+          <div className="text-center mb-8">
+            <h2 className="text-2xl font-bold mb-4 text-red-500">Error Analyzing Repository</h2>
+            <p className="text-muted-foreground">{error}</p>
+          </div>
+          <Button onClick={handleFetchRepo} className="mt-4">
+            Try Again
+          </Button>
         </div>
       ) : repoData ? (
         <div>

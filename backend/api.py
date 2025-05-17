@@ -20,6 +20,7 @@ import subprocess
 import tempfile
 import numpy as np
 import calendar
+import time  # Added for timestamp generation
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -37,8 +38,10 @@ logger.info(f"Function timeout: {MODAL_FUNCTION_TIMEOUT} seconds")
 
 # Create a Modal app with the specified name
 try:
-    app = modal.App(MODAL_APP_NAME)
-    logger.info(f"Successfully initialized Modal app: {MODAL_APP_NAME}")
+    # Add a unique timestamp to force rebuilds when redeploying
+    rebuild_timestamp = str(int(time.time()))
+    app = modal.App(MODAL_APP_NAME, env={"FORCE_REBUILD": rebuild_timestamp})
+    logger.info(f"Successfully initialized Modal app: {MODAL_APP_NAME} with rebuild timestamp: {rebuild_timestamp}")
 except Exception as e:
     logger.error(f"Failed to initialize Modal app: {str(e)}", exc_info=True)
     # Fallback to default configuration if there's an error
@@ -49,6 +52,8 @@ except Exception as e:
 image = (
     modal.Image.debian_slim()
     .apt_install("git")
+    # Add a timestamp to force rebuild on each deployment
+    .run_commands([f"echo 'Build timestamp: {datetime.now().isoformat()}' > /tmp/build_timestamp"])
     .pip_install(
         "codegen==0.52.19",
         "fastapi",
@@ -585,6 +590,15 @@ def calculate_line_metrics(codebase):
 
 
 
+@fastapi_app.get("/health")
+async def health_check():
+    """Health check endpoint."""
+    return {
+        "status": "ok",
+        "timestamp": datetime.now().isoformat(),
+        "build_timestamp": os.environ.get("FORCE_REBUILD", "not_set")
+    }
+
 @fastapi_app.post("/research", response_model=ResearchResponse)
 async def research(request: ResearchRequest) -> ResearchResponse:
     """
@@ -965,6 +979,7 @@ def fastapi_modal_app():
     Environment Variables:
         MODAL_APP_NAME: Custom name for the Modal app (default: "code-research-app")
         AGENT_SECRET_NAME: Name of the Modal secret (default: "agent-secret")
+        ALLOWED_ORIGINS: Comma-separated list of allowed CORS origins (default: "*")
         MODAL_FUNCTION_TIMEOUT: Timeout in seconds for the function (default: 600)
     
     Returns:
@@ -1002,9 +1017,15 @@ if __name__ == "__main__":
     print("  NEXT_PUBLIC_MODAL_API_URL: URL to the deployed Modal app's streaming endpoint")
     print("    Example: 'https://codegen-sh--code-research-app-fastapi-modal-app.modal.run/research/stream'")
     print("    This should be set in the frontend .env file or deployment environment.")
+    print("\n=== Deployment Notes ===")
+    print("To force a rebuild when redeploying:")
+    print("  1. The app automatically adds a timestamp to force rebuilds")
+    print("  2. You can verify the build timestamp via the /health endpoint")
+    print("  3. If changes aren't being picked up, try:")
+    print("     - modal app stop <app-id>")
+    print("     - modal deploy backend/api.py --tag force-rebuild-$(date +%s)")
     print("===========================================\n")
     
-    # Deploy the app
     try:
         app.deploy()
         logger.info(f"Successfully deployed Modal app: {MODAL_APP_NAME}")

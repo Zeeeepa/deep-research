@@ -829,18 +829,7 @@ async def analyze_repo_metrics(repo_url: str) -> Dict[str, Any]:
         raise
 
 
-@fastapi_app.post("/analyze_repo")
-async def analyze_repo(request: RepoRequest) -> Dict[str, Any]:
-    """Analyze a repository and return comprehensive metrics."""
-    try:
-        repo_url = request.repo_url
-        return await analyze_repo_metrics.remote(repo_url)
-    except Exception as e:
-        logger.error(f"Error in analyze_repo endpoint: {str(e)}")
-        return {"error": str(e)}
-
-
-@fastapi_app.post("/analyze_repo", response_model=RepoAnalyticsResponse)
+@fastapi_app.post("/research/analyze_repo", response_model=RepoAnalyticsResponse)
 async def analyze_repo(request: RepoAnalyticsRequest) -> RepoAnalyticsResponse:
     """
     Endpoint to analyze a GitHub repository and return code metrics.

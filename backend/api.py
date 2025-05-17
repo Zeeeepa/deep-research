@@ -43,8 +43,7 @@ image = (
     modal.Image.debian_slim()
     .apt_install("git")
     .pip_install(
-        "modal==0.52.19",
-        "codegen==0.30.0",
+        "codegen==0.52.19",
         "fastapi",
         "uvicorn",
         "langchain",

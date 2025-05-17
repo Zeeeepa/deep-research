@@ -599,6 +599,24 @@ async def health_check():
         "build_timestamp": os.environ.get("FORCE_REBUILD", "not_set")
     }
 
+@fastapi_app.get("/")
+async def root():
+    """Root endpoint that provides API information."""
+    return {
+        "name": "Deep Research API",
+        "version": "1.0.0",
+        "description": "API for researching and analyzing codebases using AI",
+        "endpoints": {
+            "/": "This information",
+            "/health": "Health check endpoint",
+            "/research": "Research endpoint (POST)",
+            "/research/stream": "Streaming research endpoint (POST)",
+            "/analyze-repo": "Repository analytics endpoint (POST)",
+            "/research/analyze_repo": "Repository analytics endpoint (POST, alias)"
+        },
+        "timestamp": datetime.now().isoformat()
+    }
+
 @fastapi_app.post("/research", response_model=ResearchResponse)
 async def research(request: ResearchRequest) -> ResearchResponse:
     """
@@ -673,103 +691,20 @@ async def get_similar_files(repo_name: str, query: str) -> List[str]:
     timeout=MODAL_FUNCTION_TIMEOUT
 )
 async def analyze_repo_metrics(repo_url: str) -> Dict[str, Any]:
-    """Analyze a repository and return comprehensive metrics."""
-    try:
-        codebase = Codebase.from_repo(repo_url)
-
-        num_files = len(codebase.files(extensions="*"))
-        num_functions = len(codebase.functions)
-        num_classes = len(codebase.classes)
-
-        total_loc = total_lloc = total_sloc = total_comments = 0
-        total_complexity = 0
-        total_volume = 0
-        total_mi = 0
-        total_doi = 0
-
-        monthly_commits = get_monthly_commits(repo_url)
-
-        for file in codebase.files:
-            loc, lloc, sloc, comments = count_lines(file.source)
-            total_loc += loc
-            total_lloc += lloc
-            total_sloc += sloc
-            total_comments += comments
-
-        callables = codebase.functions + [m for c in codebase.classes for m in c.methods]
-
-        num_callables = 0
-        for func in callables:
-            if not hasattr(func, "code_block"):
-                continue
-
-            complexity = calculate_cyclomatic_complexity(func)
-            volume = calculate_halstead_volume(func)
-            loc = len(func.code_block.source.splitlines())
-            mi_score = calculate_maintainability_index(volume, complexity, loc)
-
-            total_complexity += complexity
-            total_volume += volume
-            total_mi += mi_score
-            num_callables += 1
-
-        for cls in codebase.classes:
-            doi = calculate_doi(cls)
-            total_doi += doi
-
-        desc = get_github_repo_description(repo_url)
-
-        results = {
-            "repo_url": repo_url,
-            "line_metrics": {
-                "total": {
-                    "loc": total_loc,
-                    "lloc": total_lloc,
-                    "sloc": total_sloc,
-                    "comments": total_comments,
-                    "comment_density": (total_comments / total_loc * 100)
-                    if total_loc > 0
-                    else 0,
-                },
-            },
-            "cyclomatic_complexity": {
-                "average": total_complexity / num_callables if num_callables > 0 else 0,
-            },
-            "depth_of_inheritance": {
-                "average": total_doi / len(codebase.classes) if codebase.classes else 0,
-            },
-            "halstead_metrics": {
-                "total_volume": int(total_volume),
-                "average_volume": int(total_volume / num_callables)
-                if num_callables > 0
-                else 0,
-            },
-            "maintainability_index": {
-                "average": int(total_mi / num_callables) if num_callables > 0 else 0,
-            },
-            "description": desc,
-            "num_files": num_files,
-            "num_functions": num_functions,
-            "num_classes": num_classes,
-            "monthly_commits": monthly_commits,
-        }
-
-        return results
-    except Exception as e:
-        logger.error(f"Error analyzing repo metrics: {str(e)}")
-        raise
-
-
-@fastapi_app.post("/research/analyze_repo", response_model=RepoAnalyticsResponse)
-async def analyze_repo(request: RepoAnalyticsRequest) -> RepoAnalyticsResponse:
     """
-    Endpoint to analyze a GitHub repository and return code metrics.
-    """
-    try:
-        logger.info(f"Starting repository analysis for: {request.repo_url}")
+    Analyze a repository and return metrics.
+    
+    Args:
+        repo_url: The repository URL or owner/repo format.
         
+    Returns:
+        Dict[str, Any]: The repository analytics data.
+    """
+    logger.info(f"Starting repository analysis for: {repo_url}")
+    
+    try:
         # Initialize codebase
-        codebase = Codebase.from_repo(request.repo_url)
+        codebase = Codebase.from_repo(repo_url)
         
         # Get repository description
         try:
@@ -798,31 +733,69 @@ async def analyze_repo(request: RepoAnalyticsRequest) -> RepoAnalyticsResponse:
         depth_of_inheritance = calculate_doi(codebase)
         
         # Get monthly commits
-        monthly_commits = get_monthly_commits(request.repo_url)
+        monthly_commits = get_monthly_commits(repo_url)
         
         # Count files, functions, and classes
         num_files = count_files(codebase)
         num_functions = count_functions(codebase)
         num_classes = count_classes(codebase)
         
-        logger.info(f"Successfully analyzed repository: {request.repo_url}")
+        logger.info(f"Successfully analyzed repository: {repo_url}")
+        
+        return {
+            "description": repo_description,
+            "line_metrics": line_metrics,
+            "cyclomatic_complexity": cyclomatic_complexity,
+            "halstead_metrics": halstead_metrics,
+            "maintainability_index": maintainability_index,
+            "depth_of_inheritance": depth_of_inheritance,
+            "monthly_commits": monthly_commits,
+            "num_files": num_files,
+            "num_functions": num_functions,
+            "num_classes": num_classes
+        }
+    except Exception as e:
+        logger.error(f"Error in analyze_repo_metrics: {str(e)}", exc_info=True)
+        raise
+
+
+@fastapi_app.post("/research/analyze_repo", response_model=RepoAnalyticsResponse)
+async def analyze_repo_endpoint(request: RepoAnalyticsRequest) -> RepoAnalyticsResponse:
+    """
+    Analyze a repository and return metrics.
+    
+    Args:
+        request: The request containing the repository URL.
+        
+    Returns:
+        RepoAnalyticsResponse: The repository analytics data.
+    """
+    try:
+        repo_url = request.repo_url
+        logger.info(f"Analyzing repository: {repo_url}")
+        
+        # Get repository metrics
+        metrics = await analyze_repo_metrics(repo_url)
         
         return RepoAnalyticsResponse(
-            description=repo_description,
-            line_metrics=line_metrics,
-            cyclomatic_complexity=cyclomatic_complexity,
-            halstead_metrics=halstead_metrics,
-            maintainability_index=maintainability_index,
-            depth_of_inheritance=depth_of_inheritance,
-            monthly_commits=monthly_commits,
-            num_files=num_files,
-            num_functions=num_functions,
-            num_classes=num_classes
+            repo_url=repo_url,
+            **metrics
         )
-        
     except Exception as e:
         logger.error(f"Error analyzing repository: {str(e)}", exc_info=True)
-        return RepoAnalyticsResponse(error=f"Error analyzing repository: {str(e)}")
+        return RepoAnalyticsResponse(
+            repo_url=request.repo_url,
+            error=str(e)
+        )
+
+# Add an alias endpoint to match what the frontend is expecting
+@fastapi_app.post("/analyze-repo", response_model=RepoAnalyticsResponse)
+async def analyze_repo_alias_endpoint(request: RepoAnalyticsRequest) -> RepoAnalyticsResponse:
+    """
+    Alias endpoint for /research/analyze_repo to maintain compatibility with frontend.
+    """
+    return await analyze_repo_endpoint(request)
+
 
 @fastapi_app.post("/research/stream")
 async def research_stream(request: ResearchRequest):

@@ -47,7 +47,7 @@ The frontend provides an interface for users to submit a GitHub repository and r
 ### Step 1: Install Modal CLI
 
 ```bash
-pip install modal==0.52.19
+pip install modal
 ```
 
 ### Step 2: Log in to Modal
@@ -157,9 +157,9 @@ These variables configure the Next.js frontend application:
 ### Common Issues
 
 1. **Modal Deployment Errors**:
-   - Ensure you're using Modal version 0.52.19
    - Check that your `agent-secret` is properly configured
    - Verify that your GitHub token has the correct permissions
+   - Make sure you're using the correct codegen version (0.52.19)
 
 2. **Frontend Connection Issues**:
    - Make sure the `NEXT_PUBLIC_MODAL_API_URL` includes the `/research/stream` endpoint
@@ -190,4 +190,3 @@ The application includes robust error handling for various scenarios:
 More information about the `codegen` library can be found [here](https://codegen.com/).
 
 For details on the agent implementation, check out [Deep Code Research with AI](https://docs.codegen.com/tutorials/deep-code-research) from the Codegen docs. This tutorial provides an in-depth guide on how the research agent is created.
-

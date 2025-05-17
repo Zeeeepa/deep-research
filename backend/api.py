@@ -43,6 +43,7 @@ image = (
     modal.Image.debian_slim()
     .apt_install("git")
     .pip_install(
+        "modal==0.52.19",
         "codegen==0.30.0",
         "fastapi",
         "uvicorn",
@@ -433,4 +434,3 @@ if __name__ == "__main__":
         logger.error(f"Failed to deploy Modal app: {str(e)}", exc_info=True)
         print(f"Error deploying Modal app: {str(e)}")
         exit(1)
-

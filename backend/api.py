@@ -321,62 +321,191 @@ def count_lines(source: str):
 
     return loc, lloc, sloc, comments
 
-def calculate_cyclomatic_complexity(function):
-    """Calculate cyclomatic complexity for a function."""
-    # Simplified implementation
-    complexity = 1  # Base complexity
+def calculate_cyclomatic_complexity(obj):
+    """
+    Calculate cyclomatic complexity for a function or codebase.
     
-    if hasattr(function, "code_block") and function.code_block:
-        source = function.code_block.source
-        # Count decision points
-        complexity += source.count(" if ") + source.count(" else ") + source.count(" elif ")
-        complexity += source.count(" for ") + source.count(" while ")
-        complexity += source.count(" and ") + source.count(" or ")
-        complexity += source.count(" try ") + source.count(" except ")
+    Args:
+        obj: Either a function object or a codebase object
+        
+    Returns:
+        float: Cyclomatic complexity value
+    """
+    if hasattr(obj, 'files'):  # It's a codebase
+        codebase = obj
+        total_complexity = 0
+        num_callables = 0
+        
+        callables = codebase.functions + [m for c in codebase.classes for m in c.methods]
+        
+        for func in callables:
+            if not hasattr(func, "code_block"):
+                continue
+                
+            complexity = calculate_function_complexity(func)
+            total_complexity += complexity
+            num_callables += 1
+            
+        return total_complexity / num_callables if num_callables > 0 else 0
+    else:  # It's a function
+        return calculate_function_complexity(obj)
+
+def calculate_function_complexity(function):
+    """Calculate cyclomatic complexity for a single function."""
+    if not hasattr(function, "code_block"):
+        return 1
+        
+    code = function.code_block.source
     
+    # Count decision points
+    if_count = code.count("if ") + code.count("elif ")
+    for_count = code.count("for ")
+    while_count = code.count("while ")
+    except_count = code.count("except")
+    return_count = code.count("return ")
+    
+    # Base complexity is 1, then add 1 for each decision point
+    complexity = 1 + if_count + for_count + while_count + except_count + return_count
     return complexity
 
-def calculate_halstead_volume(function):
-    """Calculate Halstead volume for a function."""
-    if not hasattr(function, "code_block") or not function.code_block:
+def calculate_halstead_volume(obj):
+    """
+    Calculate Halstead volume for a function or codebase.
+    
+    Args:
+        obj: Either a function object or a codebase object
+        
+    Returns:
+        float: Halstead volume value
+    """
+    if hasattr(obj, 'files'):  # It's a codebase
+        codebase = obj
+        total_volume = 0
+        num_callables = 0
+        
+        callables = codebase.functions + [m for c in codebase.classes for m in c.methods]
+        
+        for func in callables:
+            if not hasattr(func, "code_block"):
+                continue
+                
+            volume = calculate_function_halstead(func)
+            total_volume += volume
+            num_callables += 1
+            
+        return {
+            "total_volume": int(total_volume),
+            "average_volume": int(total_volume / num_callables) if num_callables > 0 else 0
+        }
+    else:  # It's a function
+        return calculate_function_halstead(obj)
+
+def calculate_function_halstead(function):
+    """Calculate Halstead volume for a single function."""
+    if not hasattr(function, "code_block"):
         return 0
+        
+    code = function.code_block.source
     
-    source = function.code_block.source
+    # Operators in Python
+    operators = ["+", "-", "*", "/", "%", "**", "//", "=", "+=", "-=", "*=", "/=", "%=", "**=", "//=",
+                "==", "!=", ">", "<", ">=", "<=", "and", "or", "not", "is", "in", "if", "else", "elif",
+                "for", "while", "try", "except", "finally", "with", "def", "class", "return", "yield"]
     
-    # Simple approximation of operators and operands
-    operators = re.findall(r'[\+\-\*/=<>!&|^~%]|if|else|for|while|return|break|continue', source)
-    operands = re.findall(r'\b[a-zA-Z_][a-zA-Z0-9_]*\b', source)
+    # Count unique operators and operands
+    n1 = len(set(op for op in operators if op in code))
     
-    n1 = len(set(operators))  # Unique operators
-    n2 = len(set(operands))   # Unique operands
-    N1 = len(operators)       # Total operators
-    N2 = len(operands)        # Total operands
+    # Simple approximation for operands (identifiers and literals)
+    words = code.split()
+    n2 = len(set(w for w in words if w not in operators))
     
-    if n1 > 0 and n2 > 0:
-        volume = (N1 + N2) * math.log2(n1 + n2)
-        return volume
+    # Count total operators and operands
+    N1 = sum(code.count(op) for op in operators)
+    N2 = len(words) - N1
+    
+    # Ensure we don't have zeros to avoid math errors
+    n1 = max(n1, 1)
+    n2 = max(n2, 1)
+    
+    # Calculate volume
+    vocabulary = n1 + n2
+    length = N1 + N2
+    volume = length * (math.log2(vocabulary) if vocabulary > 1 else 1)
+    
+    return volume
+
+def calculate_maintainability_index(obj, halstead_volume=None, cyclomatic_complexity=None, loc=None):
+    """
+    Calculate maintainability index for a function or codebase.
+    
+    Args:
+        obj: Either a codebase object or values for direct calculation
+        halstead_volume: Optional halstead volume value
+        cyclomatic_complexity: Optional cyclomatic complexity value
+        loc: Optional lines of code value
+        
+    Returns:
+        float: Maintainability index value
+    """
+    if halstead_volume is not None and cyclomatic_complexity is not None and loc is not None:
+        # Direct calculation with provided values
+        # Maintainability Index formula
+        mi = 171 - 5.2 * math.log(halstead_volume) - 0.23 * cyclomatic_complexity - 16.2 * math.log(loc)
+        # Normalize to 0-100 scale
+        mi = max(0, min(100, mi * 100 / 171))
+        return mi
+    elif hasattr(obj, 'files'):  # It's a codebase
+        codebase = obj
+        total_mi = 0
+        num_callables = 0
+        
+        callables = codebase.functions + [m for c in codebase.classes for m in c.methods]
+        
+        for func in callables:
+            if not hasattr(func, "code_block"):
+                continue
+                
+            volume = calculate_function_halstead(func)
+            complexity = calculate_function_complexity(func)
+            loc = len(func.code_block.source.splitlines())
+            
+            mi_score = calculate_maintainability_index(None, volume, complexity, loc)
+            total_mi += mi_score
+            num_callables += 1
+            
+        return {"average": int(total_mi / num_callables) if num_callables > 0 else 0}
+    else:
+        # Should not reach here
+        return {"average": 0}
+
+def calculate_doi(obj):
+    """
+    Calculate depth of inheritance for a class or codebase.
+    
+    Args:
+        obj: Either a class object or a codebase object
+        
+    Returns:
+        float: Depth of inheritance value
+    """
+    if hasattr(obj, 'files'):  # It's a codebase
+        codebase = obj
+        total_doi = 0
+        
+        for cls in codebase.classes:
+            doi = calculate_class_doi(cls)
+            total_doi += doi
+            
+        return {"average": total_doi / len(codebase.classes) if codebase.classes else 0}
+    else:  # It's a class
+        return calculate_class_doi(obj)
+
+def calculate_class_doi(cls):
+    """Calculate depth of inheritance for a single class."""
+    # Simple implementation - count the number of base classes
+    if hasattr(cls, "base_classes"):
+        return len(cls.base_classes)
     return 0
-
-def calculate_maintainability_index(halstead_volume, cyclomatic_complexity, loc):
-    """Calculate the maintainability index."""
-    if loc <= 0:
-        return 100
-
-    try:
-        raw_mi = (
-            171
-            - 5.2 * math.log(max(1, halstead_volume))
-            - 0.23 * cyclomatic_complexity
-            - 16.2 * math.log(max(1, loc))
-        )
-        normalized_mi = max(0, min(100, raw_mi * 100 / 171))
-        return int(normalized_mi)
-    except (ValueError, TypeError):
-        return 0
-
-def calculate_doi(cls):
-    """Calculate the depth of inheritance for a given class."""
-    return len(getattr(cls, "superclasses", []))
 
 def get_github_repo_description(repo_url):
     """Get repository description from GitHub API."""
@@ -435,211 +564,24 @@ def count_classes(codebase):
 
 def calculate_line_metrics(codebase):
     """Calculate line metrics for the codebase."""
-    try:
-        total_loc = 0
-        total_sloc = 0
-        total_lloc = 0
-        total_comments = 0
-        
-        for file_path in codebase.list_files():
-            try:
-                content = codebase.read_file(file_path)
-                lines = content.split('\n')
-                
-                # Count lines
-                loc = len(lines)
-                
-                # Count source lines (non-empty)
-                sloc = sum(1 for line in lines if line.strip())
-                
-                # Count logical lines (non-comment, non-empty)
-                lloc = sum(1 for line in lines if line.strip() and not line.strip().startswith(('#', '//', '/*', '*', '*/')))
-                
-                # Count comment lines
-                comments = sum(1 for line in lines if line.strip() and (line.strip().startswith(('#', '//', '/*', '*', '*/'))))
-                
-                total_loc += loc
-                total_sloc += sloc
-                total_lloc += lloc
-                total_comments += comments
-            except:
-                pass
-        
-        # Calculate comment density
-        comment_density = (total_comments / total_loc * 100) if total_loc > 0 else 0
-        
-        return {
-            "total": {
-                "loc": total_loc,
-                "sloc": total_sloc,
-                "lloc": total_lloc,
-                "comments": total_comments,
-                "comment_density": comment_density
-            }
+    total_loc = total_lloc = total_sloc = total_comments = 0
+    
+    for file in codebase.files:
+        loc, lloc, sloc, comments = count_lines(file.source)
+        total_loc += loc
+        total_lloc += lloc
+        total_sloc += sloc
+        total_comments += comments
+    
+    return {
+        "total": {
+            "loc": total_loc,
+            "lloc": total_lloc,
+            "sloc": total_sloc,
+            "comments": total_comments,
+            "comment_density": (total_comments / total_loc * 100) if total_loc > 0 else 0,
         }
-    except Exception as e:
-        logger.warning(f"Error calculating line metrics: {str(e)}")
-        return {"total": {"loc": 0, "sloc": 0, "lloc": 0, "comments": 0, "comment_density": 0}}
-
-def calculate_cyclomatic_complexity(codebase):
-    """Calculate cyclomatic complexity for the codebase."""
-    try:
-        total_complexity = 0
-        file_count = 0
-        
-        for file_path in codebase.list_files():
-            try:
-                content = codebase.read_file(file_path)
-                
-                # Count decision points (if, for, while, case, &&, ||, ?)
-                decision_points = (
-                    len(re.findall(r'\bif\b', content)) +
-                    len(re.findall(r'\bfor\b', content)) +
-                    len(re.findall(r'\bwhile\b', content)) +
-                    len(re.findall(r'\bcase\b', content)) +
-                    len(re.findall(r'&&', content)) +
-                    len(re.findall(r'\|\|', content)) +
-                    len(re.findall(r'\?', content))
-                )
-                
-                # Basic complexity = decision points + 1
-                complexity = decision_points + 1
-                total_complexity += complexity
-                file_count += 1
-            except:
-                pass
-        
-        average_complexity = total_complexity / file_count if file_count > 0 else 0
-        
-        return {
-            "total": total_complexity,
-            "average": average_complexity
-        }
-    except Exception as e:
-        logger.warning(f"Error calculating cyclomatic complexity: {str(e)}")
-        return {"total": 0, "average": 0}
-
-def calculate_halstead_volume(codebase):
-    """Calculate Halstead volume for the codebase."""
-    try:
-        total_operators = 0
-        total_operands = 0
-        unique_operators = set()
-        unique_operands = set()
-        
-        # Common operators in programming languages
-        operators_pattern = r'[+\-*/=<>!&|^~%]|==|!=|<=|>=|&&|\|\||<<|>>|\+\+|--|->|\+=|-=|\*=|/=|%=|&=|\|=|\^=|<<=|>>=|\?|:'
-        
-        for file_path in codebase.list_files():
-            try:
-                content = codebase.read_file(file_path)
-                
-                # Count operators
-                operators = re.findall(operators_pattern, content)
-                total_operators += len(operators)
-                unique_operators.update(operators)
-                
-                # Count operands (identifiers and literals)
-                # This is a simplified approach
-                identifiers = re.findall(r'\b[a-zA-Z_][a-zA-Z0-9_]*\b', content)
-                literals = re.findall(r'\b\d+\b|"[^"]*"|\'[^\']*\'', content)
-                
-                operands = identifiers + literals
-                total_operands += len(operands)
-                unique_operands.update(operands)
-            except:
-                pass
-        
-        n1 = len(unique_operators)
-        n2 = len(unique_operands)
-        N1 = total_operators
-        N2 = total_operands
-        
-        # Calculate Halstead metrics
-        vocabulary = n1 + n2
-        length = N1 + N2
-        volume = length * np.log2(vocabulary) if vocabulary > 0 else 0
-        difficulty = (n1 * N2) / (2 * n2) if n2 > 0 else 0
-        effort = difficulty * volume
-        
-        return {
-            "vocabulary": vocabulary,
-            "length": length,
-            "total_volume": volume,
-            "difficulty": difficulty,
-            "effort": effort
-        }
-    except Exception as e:
-        logger.warning(f"Error calculating Halstead volume: {str(e)}")
-        return {"vocabulary": 0, "length": 0, "total_volume": 0, "difficulty": 0, "effort": 0}
-
-def calculate_maintainability_index(codebase):
-    """Calculate maintainability index for the codebase."""
-    try:
-        # Get metrics needed for calculation
-        line_metrics = calculate_line_metrics(codebase)
-        cyclomatic_complexity = calculate_cyclomatic_complexity(codebase)
-        halstead_metrics = calculate_halstead_volume(codebase)
-        
-        # Extract values
-        lloc = line_metrics["total"]["lloc"]
-        cc = cyclomatic_complexity["average"]
-        hv = halstead_metrics["total_volume"]
-        
-        # Calculate maintainability index
-        # MI = 171 - 5.2 * ln(HV) - 0.23 * CC - 16.2 * ln(LLOC)
-        mi = 171
-        if hv > 0:
-            mi -= 5.2 * np.log(hv)
-        mi -= 0.23 * cc
-        if lloc > 0:
-            mi -= 16.2 * np.log(lloc)
-        
-        # Normalize to 0-100 scale
-        normalized_mi = max(0, min(100, mi * 100 / 171))
-        
-        return {
-            "raw": mi,
-            "average": normalized_mi
-        }
-    except Exception as e:
-        logger.warning(f"Error calculating maintainability index: {str(e)}")
-        return {"raw": 0, "average": 0}
-
-def calculate_doi(codebase):
-    """Calculate depth of inheritance for the codebase."""
-    try:
-        total_depth = 0
-        class_count = 0
-        
-        for file_path in codebase.list_files():
-            try:
-                content = codebase.read_file(file_path)
-                
-                # Find class definitions with inheritance
-                class_matches = re.findall(r'class\s+[a-zA-Z0-9_]+\s*(?:\([^)]*\))?', content)
-                
-                for class_match in class_matches:
-                    class_count += 1
-                    
-                    # Check for inheritance
-                    if '(' in class_match:
-                        # Count number of parent classes
-                        parents = class_match.split('(')[1].split(')')[0]
-                        parent_count = len(parents.split(','))
-                        total_depth += parent_count
-            except:
-                pass
-        
-        average_depth = total_depth / class_count if class_count > 0 else 0
-        
-        return {
-            "total": total_depth,
-            "average": average_depth
-        }
-    except Exception as e:
-        logger.warning(f"Error calculating depth of inheritance: {str(e)}")
-        return {"total": 0, "average": 0}
+    }
 
 def get_monthly_commits(codebase):
     """Get monthly commit counts for the past year."""

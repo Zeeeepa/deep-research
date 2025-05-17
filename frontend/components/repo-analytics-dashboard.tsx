@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { BarChart3, Code2, FileCode2, GitBranch, Github, Settings, MessageSquare, FileText, Code, RefreshCcw, PaintBucket, Brain } from "lucide-react"
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis } from "recharts"
 
@@ -55,14 +55,28 @@ interface CommitData {
   commits: number;
 }
 
-export default function RepoAnalyticsDashboard() {
-  const [repoUrl, setRepoUrl] = useState("")
+interface RepoAnalyticsDashboardProps {
+  repoUrl?: string;
+}
+
+export default function RepoAnalyticsDashboard({ repoUrl: initialRepoUrl }: RepoAnalyticsDashboardProps) {
+  const [repoUrl, setRepoUrl] = useState(initialRepoUrl || "")
   const [repoData, setRepoData] = useState<RepoData | null>(null)
   const [hoveredCard, setHoveredCard] = useState<string | null>(null)
   const [commitData, setCommitData] = useState<CommitData[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [repoDataRetrieved, setRepoDataRetrieved] = useState(false)
+
+  // Update repoUrl when initialRepoUrl changes
+  useEffect(() => {
+    if (initialRepoUrl) {
+      setRepoUrl(initialRepoUrl);
+      // Auto-fetch repo data when repoUrl is provided as a prop
+      handleFetchRepo();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialRepoUrl]);
 
   const parseRepoUrl = (input: string): string => {
     if (input.includes('github.com')) {
@@ -94,9 +108,12 @@ export default function RepoAnalyticsDashboard() {
           throw new Error('NEXT_PUBLIC_MODAL_API_URL environment variable is not set');
       }
       
-      // Extract the base URL to use for analytics endpoint
-      const baseUrl = modalApiUrl.substring(0, modalApiUrl.lastIndexOf('/'));
-      const analyticsUrl = `${baseUrl}/research/analyze_repo`;
+      // Use the /analyze-repo endpoint directly
+      const analyticsUrl = modalApiUrl.includes('/research/stream') 
+        ? modalApiUrl.replace('/research/stream', '/analyze-repo')
+        : `${new URL(modalApiUrl).origin}/analyze-repo`;
+      
+      console.log("Using analytics URL:", analyticsUrl);
       
       const response = await fetch(analyticsUrl, {
         method: 'POST',

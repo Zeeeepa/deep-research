@@ -283,7 +283,7 @@ export default function RepoChatDashboard() {
                 <div className="space-y-6">
                   {/* Analytics Dashboard */}
                   <div className="mt-4">
-                    <RepoAnalyticsDashboard />
+                    <RepoAnalyticsDashboard repoUrl={repoUrl} />
                   </div>
                   
                   {/* Q&A Section below Analytics */}

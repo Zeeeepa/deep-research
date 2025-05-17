@@ -16,10 +16,11 @@ const nextConfig = {
   images: {
     unoptimized: true,
   },
+  // Disable experimental features that might be causing crashes
   experimental: {
-    webpackBuildWorker: true,
-    parallelServerBuildTraces: true,
-    parallelServerCompiles: true,
+    // webpackBuildWorker: true,
+    // parallelServerBuildTraces: true,
+    // parallelServerCompiles: true,
   },
 }
 

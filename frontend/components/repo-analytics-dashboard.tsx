@@ -96,7 +96,7 @@ export default function RepoAnalyticsDashboard() {
       
       // Extract the base URL to use for analytics endpoint
       const baseUrl = modalApiUrl.substring(0, modalApiUrl.lastIndexOf('/'));
-      const analyticsUrl = `${baseUrl}/analyze_repo`;
+      const analyticsUrl = `${baseUrl}/research/analyze_repo`;
       
       const response = await fetch(analyticsUrl, {
         method: 'POST',
